@@ -90,11 +90,11 @@ Returns:
 **Then analyze the documentation:**
 
 1. **Content Type** — from `metadata.docType` (one scene per step = more scenes):
-   - `quickstart` → 3-5 steps = 5-7 scenes (intro + steps + summary), ~45-60s video
-   - `tutorial` → 5-8 steps = 7-10 scenes, ~60-90s video
-   - `api-reference` → endpoint showcases, 4-6 scenes, ~45-60s
-   - `guide` → concept explanations + code, 6-10 scenes, ~60-90s
-   - `how-to` → problem/solution format, 5-8 scenes, ~45-60s
+   - `quickstart` → 3-5 steps = 5-7 scenes (intro + steps + summary)
+   - `tutorial` → 5-8 steps = 7-10 scenes
+   - `api-reference` → endpoint showcases, 4-6 scenes
+   - `guide` → concept explanations + code, 6-10 scenes
+   - `how-to` → problem/solution format, 5-8 scenes
 
 2. **Parse the markdown** to identify:
    - Code blocks (language from fence markers)
@@ -386,8 +386,9 @@ const { fontFamily } = loadFont('normal', { weights: ['400', '700'], subsets: ['
 type Timecode = { start: number; end: number; text: string };
 
 /** Group the flat timecodes array into per-scene groups using narration paragraphs.
- *  IMPORTANT: This splits on [.!?] — avoid abbreviations (e.g., "e.g.", "Dr.") in narration
- *  as they create extra sentence boundaries. Write clean sentences with no mid-sentence periods. */
+ *  IMPORTANT: This splits on [.!?] — avoid abbreviations with periods ("Dr.", "vs.")
+ *  in narration as they create extra sentence boundaries. Write clean sentences
+ *  with no mid-sentence periods. */
 function groupTimecodesByScene(timecodes: Timecode[], paragraphs: string[]): Timecode[][] {
   const groups: Timecode[][] = [];
   let idx = 0;
@@ -429,8 +430,8 @@ const IntroScene: React.FC<{
   // Reveal 1: card fades in at scene start
   const cardScale = spring({ frame, fps, from: 0.8, to: 1, config: { damping: 12 } });
   const cardOpacity = interpolate(frame, [0, 15], [0, 1], { extrapolateRight: 'clamp' });
-  // Reveal 2: title appears when sentence 1 starts
-  const titleFrame = sceneTimecodes[0] ? getRevealFrame(sceneTimecodes[0], s0, fps) : 12;
+  // Reveal 2: title appears when sentence 1 starts (offset by 12 frames so it doesn't collide with card fade-in)
+  const titleFrame = Math.max(12, sceneTimecodes[0] ? getRevealFrame(sceneTimecodes[0], s0, fps) : 12);
   const titleOpacity = interpolate(frame, [titleFrame, titleFrame + 13], [0, 1],
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   // Reveal 3: badges appear when sentence 2 starts (or after title)
