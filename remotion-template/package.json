@@ -1,0 +1,32 @@
+{
+  "name": "docs-tutorial-remotion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion video project for documentation tutorial generation",
+  "scripts": {
+    "dev": "remotion studio",
+    "build": "remotion render",
+    "upgrade": "remotion upgrade"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.421",
+    "@remotion/cli": "4.0.421",
+    "@remotion/google-fonts": "4.0.421",
+    "@remotion/layout-utils": "4.0.421",
+    "@remotion/media": "4.0.421",
+    "@remotion/media-utils": "4.0.421",
+    "@remotion/renderer": "4.0.421",
+    "@remotion/tailwind": "4.0.421",
+    "@remotion/transitions": "4.0.421",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "4.0.421",
+    "tailwindcss": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.45",
+    "typescript": "^5.3.3"
+  }
+}

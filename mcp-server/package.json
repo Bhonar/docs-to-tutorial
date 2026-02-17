@@ -1,0 +1,39 @@
+{
+  "name": "docs-to-tutorial-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for converting documentation URLs to tutorial videos",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "remotion",
+    "video",
+    "tutorial",
+    "documentation",
+    "tabstack"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@remotion/bundler": "^4.0.421",
+    "@remotion/renderer": "^4.0.421",
+    "@remotion/tailwind": "^4.0.421",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "playwright": "^1.49.1",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  }
+}
