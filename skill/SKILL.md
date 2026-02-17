@@ -149,7 +149,10 @@ Guidelines:
 **Save returned values:**
 - `audio.music.staticPath`
 - `audio.narration.staticPath`
+- `audio.narration.timecodes` — array of `{start: number, end: number, text: string}` per sentence. **You MUST use these to time scene durations and visual reveals in Step 5.** Do NOT guess frame numbers.
 - `audio.beats`
+
+**Also save your narration paragraphs** as a list — you'll need them in Step 5 to map timecodes to scenes.
 
 ---
 
@@ -301,12 +304,25 @@ const CalloutCard: React.FC<{
 > If the narration says "install the package", the screen must show the install command typing out at that moment.
 > If the narration says "create a file", the screen must show that file appearing at that moment.
 
-**Narration-to-visual sync:**
-- Split the narration for each scene into individual sentences
-- Each sentence = a visual change (new element appears, text types out, highlight moves, etc.)
-- If a narration paragraph has 3 sentences, the scene must have 3 distinct visual moments
-- Use `useCurrentFrame()` to time each visual change to match when the narrator says it
-- NEVER have a scene where the narrator talks for 10+ seconds while the screen shows the same static content
+**Narration-to-visual sync using timecodes:**
+
+`audio.narration.timecodes` gives you `{start, end, text}` for every sentence. **Use it to drive ALL timing:**
+
+1. **Group timecodes by scene** — each narration paragraph = one scene. Gather the timecodes whose `.text` matches that paragraph's sentences.
+2. **Compute scene duration from timecodes:**
+   ```typescript
+   const sceneStart = sceneTimecodes[0].start;
+   const sceneEnd = sceneTimecodes[sceneTimecodes.length - 1].end;
+   const durationInFrames = Math.round((sceneEnd - sceneStart + 0.5) * fps);
+   ```
+3. **Time visual reveals to sentence boundaries:**
+   ```typescript
+   // Inside a scene, frame 0 = scene start. Convert each sentence to a frame offset:
+   const revealFrame = Math.round((timecode.start - sceneStart) * fps);
+   ```
+4. Each sentence = a visual change. 3 sentences in a scene = 3 visual moments at 3 different `revealFrame` values.
+- **NEVER hardcode** `durationInFrames={5 * fps}` — always derive from timecodes
+- NEVER have a scene where the narrator talks while the screen stays static
 
 **ONE step, ONE idea, ONE scene:**
 - If a scene has more than ONE command, ONE code block, or ONE concept — SPLIT it
@@ -325,12 +341,13 @@ const CalloutCard: React.FC<{
 - Text should never touch the edges of containers
 - If content feels tight, you have too much — split into two scenes
 
-**Staged reveals in every scene.** Elements appear one by one, 10-15 frames apart:
-1. Frame 0-15: Background + container fade in
-2. Frame 10-25: Title/heading appears
-3. Frame 20-40: Badge or label slides in
-4. Frame 30+: Main content appears (with typing effect if code)
-5. Frame 50+: Highlight kicks in on key line
+**Staged reveals in every scene.** Time each reveal to a sentence's `revealFrame`:
+1. Scene start (frame 0): Background + container fade in
+2. Sentence 1 `revealFrame`: Title/heading appears
+3. Sentence 2 `revealFrame`: Main content appears (typing effect for code)
+4. Sentence 3 `revealFrame`: Highlight or result appears
+- If only 1-2 sentences, space reveals evenly across the scene duration
+- Fallback if no timecodes: space reveals 10-15 frames apart
 
 **Show the result after commands.** After typing `npm install`, show a result scene with `✓ Successfully installed`. After writing code, show mock output. Use result scenes for install/build/run commands. Skip them for config-only steps.
 
@@ -342,7 +359,7 @@ const CalloutCard: React.FC<{
 
 #### Complete Generated.tsx Example
 
-This shows how ALL the pieces compose together. Adapt the scene components, props, and content for each video — but follow this structure:
+This shows how ALL the pieces compose together. **Key pattern: timecodes drive all timing.**
 
 ```typescript
 import React from 'react';
@@ -364,29 +381,67 @@ import { Badge } from '../../../src/components/ui/badge';
 
 const { fontFamily } = loadFont('normal', { weights: ['400', '700'], subsets: ['latin'] });
 
+// === Timecode helpers (REQUIRED — copy these into every Generated.tsx) ===
+
+type Timecode = { start: number; end: number; text: string };
+
+/** Group the flat timecodes array into per-scene groups using narration paragraphs */
+function groupTimecodesByScene(timecodes: Timecode[], paragraphs: string[]): Timecode[][] {
+  const groups: Timecode[][] = [];
+  let idx = 0;
+  for (const para of paragraphs) {
+    const sentenceCount = para.split(/[.!?]+/).filter(s => s.trim()).length;
+    const group: Timecode[] = [];
+    for (let i = 0; i < sentenceCount && idx < timecodes.length; i++) {
+      group.push(timecodes[idx]);
+      idx++;
+    }
+    groups.push(group);
+  }
+  return groups;
+}
+
+/** Compute scene duration in frames from its timecodes */
+function getSceneDuration(group: Timecode[], fps: number): number {
+  if (group.length === 0) return 4 * fps;
+  return Math.round((group[group.length - 1].end - group[0].start + 0.5) * fps);
+}
+
+/** Get the frame offset for a sentence relative to its scene start */
+function getRevealFrame(tc: Timecode, sceneStart: number, fps: number): number {
+  return Math.round((tc.start - sceneStart) * fps);
+}
+
 // === Reusable helpers (StepIndicator, TypingText, HighlightedCode, CalloutCard) ===
 // ... paste the helper components from above here ...
 
-// === Scene Components ===
+// === Scene Components (accept sceneTimecodes for timing) ===
 
-const IntroScene: React.FC<{ content: any; branding: any; height: number }> = ({ content, branding, height }) => {
+const IntroScene: React.FC<{
+  content: any; branding: any; height: number; sceneTimecodes: Timecode[];
+}> = ({ content, branding, height, sceneTimecodes }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  // Stage 1: card
+  const s0 = sceneTimecodes[0]?.start ?? 0;
+
+  // Reveal 1: card fades in at scene start
   const cardScale = spring({ frame, fps, from: 0.8, to: 1, config: { damping: 12 } });
   const cardOpacity = interpolate(frame, [0, 15], [0, 1], { extrapolateRight: 'clamp' });
-  // Stage 2: title (frame 12)
-  const titleOpacity = interpolate(frame, [12, 25], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const titleSlide = interpolate(frame, [12, 25], [20, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  // Stage 3: badges (frame 25)
-  const badgeOpacity = interpolate(frame, [25, 38], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Reveal 2: title appears when sentence 1 starts
+  const titleFrame = sceneTimecodes[0] ? getRevealFrame(sceneTimecodes[0], s0, fps) : 12;
+  const titleOpacity = interpolate(frame, [titleFrame, titleFrame + 13], [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Reveal 3: badges appear when sentence 2 starts (or after title)
+  const badgeFrame = sceneTimecodes[1] ? getRevealFrame(sceneTimecodes[1], s0, fps) : 25;
+  const badgeOpacity = interpolate(frame, [badgeFrame, badgeFrame + 13], [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
     <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: `linear-gradient(135deg, ${branding.colors.primary}, ${branding.colors.secondary})` }}>
       <div style={{ transform: `scale(${cardScale})`, opacity: cardOpacity }}>
         <Card className="p-8 max-w-2xl">
-          <div style={{ opacity: titleOpacity, transform: `translateY(${titleSlide}px)` }}>
+          <div style={{ opacity: titleOpacity }}>
             <h1 style={{ fontSize: height * 0.07, fontWeight: 700 }}>{content.title}</h1>
           </div>
           <div className="flex gap-2 mt-4" style={{ opacity: badgeOpacity }}>
@@ -402,48 +457,40 @@ const IntroScene: React.FC<{ content: any; branding: any; height: number }> = ({
 const CommandScene: React.FC<{
   title: string; command: string;
   stepNumber: number; totalSteps: number;
-  branding: any;
-}> = ({ title, command, stepNumber, totalSteps, branding }) => {
+  branding: any; sceneTimecodes: Timecode[];
+}> = ({ title, command, stepNumber, totalSteps, branding, sceneTimecodes }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
   const colors = branding.colors;
-  // Stage 1: card (frame 0-10)
+  const s0 = sceneTimecodes[0]?.start ?? 0;
+
+  // Reveal 1: card at scene start
   const cardOpacity = interpolate(frame, [0, 10], [0, 1], { extrapolateRight: 'clamp' });
-  // Stage 2: title (frame 8-20)
-  const titleOpacity = interpolate(frame, [8, 20], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const titleSlide = interpolate(frame, [8, 20], [15, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  // Stage 3: terminal (frame 22-32)
-  const termOpacity = interpolate(frame, [22, 32], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Reveal 2: title synced to sentence 1
+  const titleFrame = sceneTimecodes[0] ? getRevealFrame(sceneTimecodes[0], s0, fps) : 8;
+  const titleOpacity = interpolate(frame, [titleFrame, titleFrame + 12], [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Reveal 3: terminal synced to sentence 2 (when narrator says the command)
+  const termFrame = sceneTimecodes[1] ? getRevealFrame(sceneTimecodes[1], s0, fps) : 22;
+  const termOpacity = interpolate(frame, [termFrame, termFrame + 10], [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
     <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: `linear-gradient(135deg, ${colors.primary}11, ${colors.secondary}11)` }}>
+      background: `linear-gradient(135deg, ${colors.primary}11, ${colors.secondary}11)`, padding: 60 }}>
       <StepIndicator current={stepNumber} total={totalSteps} colors={colors} />
       <div style={{ opacity: cardOpacity, width: '80%' }}>
         <Card className="p-8">
-          <div style={{ opacity: titleOpacity, transform: `translateY(${titleSlide}px)` }}>
+          <div style={{ opacity: titleOpacity }}>
             <Badge className="mb-4">Step {stepNumber}</Badge>
             <h2 style={{ fontSize: 32, fontWeight: 700, marginBottom: 16 }}>{title}</h2>
           </div>
           <div style={{ opacity: termOpacity, background: '#1a1a2e', borderRadius: 8, padding: 24,
             fontFamily: 'monospace', fontSize: 20, color: '#00ff88' }}>
             <span style={{ color: '#888' }}>$ </span>
-            <TypingText text={command} startFrame={35} charsPerFrame={0.5} />
+            <TypingText text={command} startFrame={termFrame + 5} charsPerFrame={0.5} />
           </div>
         </Card>
-      </div>
-    </AbsoluteFill>
-  );
-};
-
-const ResultScene: React.FC<{ command: string; output: string }> = ({ command, output }) => {
-  const frame = useCurrentFrame();
-  const outputOpacity = interpolate(frame, [15, 30], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-
-  return (
-    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117' }}>
-      <div style={{ width: '75%', background: '#161b22', borderRadius: 8, padding: 24, fontFamily: 'monospace', fontSize: 18 }}>
-        <div style={{ color: '#8b949e' }}>$ {command}</div>
-        <div style={{ color: '#3fb950', marginTop: 12, opacity: outputOpacity }}>{output}</div>
       </div>
     </AbsoluteFill>
   );
@@ -452,17 +499,26 @@ const ResultScene: React.FC<{ command: string; output: string }> = ({ command, o
 const CodeScene: React.FC<{
   title: string; lines: string[]; highlightLine: number;
   stepNumber: number; totalSteps: number;
-  branding: any;
-}> = ({ title, lines, highlightLine, stepNumber, totalSteps, branding }) => {
+  branding: any; sceneTimecodes: Timecode[];
+}> = ({ title, lines, highlightLine, stepNumber, totalSteps, branding, sceneTimecodes }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
   const colors = branding.colors;
+  const s0 = sceneTimecodes[0]?.start ?? 0;
+
   const cardOpacity = interpolate(frame, [0, 10], [0, 1], { extrapolateRight: 'clamp' });
-  const titleOpacity = interpolate(frame, [8, 20], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const codeOpacity = interpolate(frame, [22, 35], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Title synced to sentence 1
+  const titleFrame = sceneTimecodes[0] ? getRevealFrame(sceneTimecodes[0], s0, fps) : 8;
+  const titleOpacity = interpolate(frame, [titleFrame, titleFrame + 12], [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Code synced to sentence 2
+  const codeFrame = sceneTimecodes[1] ? getRevealFrame(sceneTimecodes[1], s0, fps) : 22;
+  const codeOpacity = interpolate(frame, [codeFrame, codeFrame + 13], [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
     <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: `linear-gradient(135deg, ${colors.primary}11, ${colors.secondary}11)` }}>
+      background: `linear-gradient(135deg, ${colors.primary}11, ${colors.secondary}11)`, padding: 60 }}>
       <StepIndicator current={stepNumber} total={totalSteps} colors={colors} />
       <div style={{ opacity: cardOpacity, width: '85%' }}>
         <div style={{ opacity: titleOpacity }}>
@@ -470,7 +526,7 @@ const CodeScene: React.FC<{
           <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 16, color: '#fff' }}>{title}</h2>
         </div>
         <div style={{ opacity: codeOpacity }}>
-          <HighlightedCode lines={lines} highlightLine={highlightLine} startFrame={35} colors={colors} />
+          <HighlightedCode lines={lines} highlightLine={highlightLine} startFrame={codeFrame + 15} colors={colors} />
         </div>
       </div>
     </AbsoluteFill>
@@ -479,21 +535,27 @@ const CodeScene: React.FC<{
 
 const CalloutScene: React.FC<{ type: 'warning' | 'tip' | 'note'; message: string; colors: any }> = ({ type, message, colors }) => {
   return (
-    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${colors.primary}0a` }}>
+    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: `${colors.primary}0a`, padding: 60 }}>
       <CalloutCard type={type} message={message} />
     </AbsoluteFill>
   );
 };
 
-const SummaryScene: React.FC<{ steps: string[]; branding: any }> = ({ steps, branding }) => {
+const SummaryScene: React.FC<{ steps: string[]; branding: any; sceneTimecodes: Timecode[] }> = ({ steps, branding, sceneTimecodes }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const s0 = sceneTimecodes[0]?.start ?? 0;
+
   return (
     <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: `linear-gradient(135deg, ${branding.colors.primary}, ${branding.colors.secondary})` }}>
+      background: `linear-gradient(135deg, ${branding.colors.primary}, ${branding.colors.secondary})`, padding: 60 }}>
       <Card className="p-8 max-w-2xl">
         <h2 style={{ fontSize: 36, fontWeight: 700, marginBottom: 20 }}>What We Covered</h2>
         {steps.map((step, i) => {
-          const itemOpacity = interpolate(frame, [10 + i * 12, 22 + i * 12], [0, 1],
+          // Each recap item synced to a sentence timecode
+          const revealAt = sceneTimecodes[i] ? getRevealFrame(sceneTimecodes[i], s0, fps) : 10 + i * 12;
+          const itemOpacity = interpolate(frame, [revealAt, revealAt + 12], [0, 1],
             { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
           return (
             <div key={i} style={{ opacity: itemOpacity, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
@@ -511,7 +573,19 @@ const SummaryScene: React.FC<{ steps: string[]; branding: any }> = ({ steps, bra
 
 export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, audio, duration }) => {
   const { fps, height } = useVideoConfig();
-  const totalSteps = 3; // Adjust per video
+  const totalSteps = 3;
+
+  // --- Timecode-driven timing ---
+  const timecodes: Timecode[] = audio.narration?.timecodes ?? [];
+  const narrationParagraphs = [
+    "Let's learn how to integrate Stripe payments into your app.",
+    "First, install the Stripe SDK. Run npm install stripe in your terminal.",
+    "Now create a checkout session. Import Stripe and configure it with your API key. The key line is line_items where we define what the customer is buying.",
+    "Important: never expose your secret key in client-side code.",
+    "Finally, add your API key to the environment. Create a dot env file with your Stripe key.",
+    "That's everything we covered. You installed Stripe, created a checkout session, and configured your API key.",
+  ];
+  const scenes = groupTimecodesByScene(timecodes, narrationParagraphs);
 
   return (
     <AbsoluteFill style={{ background: '#000', fontFamily }}>
@@ -519,62 +593,54 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
       {audio.narration?.staticPath && <Audio src={staticFile(audio.narration.staticPath)} volume={1} />}
 
       <TransitionSeries>
-        {/* Scene 1: Intro (4-6s) */}
-        <TransitionSeries.Sequence durationInFrames={5 * fps}>
-          <IntroScene content={content} branding={branding} height={height} />
+        {/* Scene 1: Intro — duration from timecodes */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[0], fps)}>
+          <IntroScene content={content} branding={branding} height={height} sceneTimecodes={scenes[0]} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 10 })} presentation={fade()} />
 
-        {/* Scene 2: Install command (4-5s) */}
-        <TransitionSeries.Sequence durationInFrames={5 * fps}>
+        {/* Scene 2: Install command — reveals synced to sentences */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[1], fps)}>
           <CommandScene title="Install the SDK" command="npm install @stripe/stripe-js"
-            stepNumber={1} totalSteps={totalSteps} branding={branding} />
+            stepNumber={1} totalSteps={totalSteps} branding={branding} sceneTimecodes={scenes[1]} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 8 })} presentation={slide()} />
 
-        {/* Scene 3: Install result (3s) */}
-        <TransitionSeries.Sequence durationInFrames={3 * fps}>
-          <ResultScene command="npm install @stripe/stripe-js" output="✓ Added 3 packages in 2.1s" />
-        </TransitionSeries.Sequence>
-        <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 10 })} presentation={fade()} />
-
-        {/* Scene 4: Code walkthrough (8-12s) */}
-        <TransitionSeries.Sequence durationInFrames={10 * fps}>
+        {/* Scene 3: Code walkthrough — highlight synced to sentence 3 */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[2], fps)}>
           <CodeScene title="Create the checkout session"
             lines={[
               "import Stripe from 'stripe';",
-              "",
               "const stripe = new Stripe(process.env.STRIPE_KEY);",
-              "",
               "const session = await stripe.checkout.sessions.create({",
               "  line_items: [{ price: 'price_xxx', quantity: 1 }],",
               "  mode: 'payment',",
               "  success_url: 'https://example.com/success',",
               "});",
             ]}
-            highlightLine={5}
-            stepNumber={2} totalSteps={totalSteps} branding={branding} />
+            highlightLine={3}
+            stepNumber={2} totalSteps={totalSteps} branding={branding} sceneTimecodes={scenes[2]} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 10 })} presentation={fade()} />
 
-        {/* Scene 5: Warning callout (3-4s) */}
-        <TransitionSeries.Sequence durationInFrames={4 * fps}>
+        {/* Scene 4: Warning callout */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[3], fps)}>
           <CalloutScene type="warning" message="Never expose your secret key in client-side code."
             colors={branding.colors} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 10 })} presentation={fade()} />
 
-        {/* Scene 6: Config step (6-8s) */}
-        <TransitionSeries.Sequence durationInFrames={7 * fps}>
+        {/* Scene 5: Config step */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[4], fps)}>
           <CommandScene title="Add your API key" command="echo STRIPE_KEY=sk_test_... >> .env"
-            stepNumber={3} totalSteps={totalSteps} branding={branding} />
+            stepNumber={3} totalSteps={totalSteps} branding={branding} sceneTimecodes={scenes[4]} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 10 })} presentation={fade()} />
 
-        {/* Scene 7: Summary (5-8s) */}
-        <TransitionSeries.Sequence durationInFrames={6 * fps}>
+        {/* Scene 6: Summary — each recap item synced to a sentence */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[5], fps)}>
           <SummaryScene steps={['Installed the Stripe SDK', 'Created a checkout session', 'Configured the API key']}
-            branding={branding} />
+            branding={branding} sceneTimecodes={scenes[5]} />
         </TransitionSeries.Sequence>
       </TransitionSeries>
     </AbsoluteFill>
@@ -583,11 +649,11 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 ```
 
 **Adapt this for each video:**
-- Change the scene components and props to match the documentation content
-- Add or remove scenes to match the number of steps (one per scene)
-- Adjust `durationInFrames` based on narration pacing (simple = 4-5s, complex = 8-12s)
+- Write `narrationParagraphs` to match your exact narration script from Step 4
+- **Always use `getSceneDuration(scenes[i], fps)`** for `durationInFrames` — never hardcode `N * fps`
+- **Always pass `sceneTimecodes={scenes[i]}` to scene components** — use `getRevealFrame()` for visual timing
+- Add or remove scenes to match the number of narration paragraphs (one paragraph = one scene)
 - Import different user components as needed
-- Use `CodeScene` + `HighlightedCode` for multi-line code, `CommandScene` + `TypingText` for terminal commands
 
 **Remotion rules:**
 - Audio: `import { Audio } from '@remotion/media'` — NOT from `remotion`
@@ -596,7 +662,7 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 - Animations: ONLY `useCurrentFrame()` + `spring()` / `interpolate()` — NO CSS animations
 - Images: `<Img>` from `remotion` — NOT `<img>`
 - Fonts: Load via `@remotion/google-fonts` before use
-- Duration: `seconds * fps` — never hardcode frame numbers
+- Duration: always from `getSceneDuration(timecodes, fps)` — NEVER hardcode `N * fps`
 - Clamp: Always use `extrapolateRight: 'clamp'` on interpolate
 
 ---
@@ -614,7 +680,8 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 6. All animations use `useCurrentFrame()` + `spring`/`interpolate`
 7. User's components are imported with correct relative paths
 8. User's components render without errors in Remotion context
-9. Scene durations calculated from fps
+9. **Scene durations use `getSceneDuration()` from timecodes** — no hardcoded `N * fps`
+10. **Scene components receive `sceneTimecodes` prop** — reveals use `getRevealFrame()` not fixed frame offsets
 
 **Scene structure:**
 10. Has intro scene and summary scene
@@ -627,13 +694,13 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 17. Narration content matches visual progression 1:1
 
 **Tutorial quality:**
-16. **All code/commands use TypingText** — characters appear one by one with blinking cursor
-17. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
-18. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
-19. **Elements appear in stages** — title first, then badge, then code, then highlight (never all at once)
-20. **Command scenes are followed by ResultScene** — show what happens after running a command
-19. **Warnings/tips from docs are CalloutScene** — distinct styled cards, not embedded in code scenes
-20. **Pacing varies by complexity** — simple steps are 4-5s, complex code walkthroughs are 8-12s
+18. **All code/commands use TypingText** — characters appear one by one with blinking cursor
+19. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
+20. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
+21. **Elements appear in stages synced to timecodes** — each reveal at a `getRevealFrame()` value, never all at once
+22. **Command scenes are followed by ResultScene** — show what happens after running a command
+23. **Warnings/tips from docs are CalloutScene** — distinct styled cards, not embedded in code scenes
+24. **Pacing driven by timecodes** — scene durations match narration length, not arbitrary guesses
 
 **Call `render_video`** with:
 - `inputProps` — full props (content, branding, audio, metadata, duration)
