@@ -296,7 +296,21 @@ const CalloutCard: React.FC<{
 
 #### Scene Design Rules
 
-**One step per scene.** Never combine two steps in one scene.
+> **⚠️ THE #1 RULE: ONE step, ONE idea, ONE scene.**
+> If a scene has more than ONE command, ONE code block, or ONE concept — you MUST split it into separate scenes.
+> A scene with a numbered list (Step 1, Step 2, Step 3…) is ALWAYS wrong. Each of those steps must be its own scene.
+
+**Maximum content per scene:**
+- ONE title/heading
+- ONE code block OR ONE command OR ONE short explanation (1-2 sentences)
+- ONE supporting visual (mock UI, terminal output, or diagram)
+- If you have more content, it belongs in the NEXT scene
+
+**Whitespace and spacing.** Every scene should feel spacious, not cramped:
+- Use generous padding (40-60px on all sides)
+- Leave at least 30% of the scene area as empty space
+- Text should never touch the edges of containers
+- If content feels tight, you have too much — split into two scenes
 
 **Staged reveals in every scene.** Elements appear one by one, 10-15 frames apart:
 1. Frame 0-15: Background + container fade in
@@ -309,7 +323,7 @@ const CalloutCard: React.FC<{
 
 **Callouts get their own scene.** Warnings, tips, and notes from the docs become separate 3-4s scenes using `CalloutCard`. Don't embed them inside code scenes.
 
-**Layouts.** Use at least 3 different layouts across scenes: centered, split (60/40), stacked, grid, full-bleed. Each scene should feel spacious — don't cram content.
+**Layouts.** Use at least 3 different layouts across scenes: centered, split (60/40), stacked, grid, full-bleed.
 
 ---
 
@@ -592,15 +606,17 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 **Scene structure:**
 10. Has intro scene and summary scene
 11. **Each scene explains exactly ONE step** — no scene combines two steps
-12. **Every narration paragraph has a matching visual scene** — no explanation without a visual
-13. Narration content matches visual progression 1:1
+12. **No scene has a numbered list of steps** — if you see "1. … 2. … 3. …" in a scene, it must be split
+13. **Every scene has at least 30% empty space** — if it looks crowded, remove content or split
+14. **Every narration paragraph has a matching visual scene** — no explanation without a visual
+15. Narration content matches visual progression 1:1
 
 **Tutorial quality:**
-14. **All code/commands use TypingText** — characters appear one by one with blinking cursor
-15. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
-16. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
-17. **Elements appear in stages** — title first, then badge, then code, then highlight (never all at once)
-18. **Command scenes are followed by ResultScene** — show what happens after running a command
+16. **All code/commands use TypingText** — characters appear one by one with blinking cursor
+17. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
+18. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
+19. **Elements appear in stages** — title first, then badge, then code, then highlight (never all at once)
+20. **Command scenes are followed by ResultScene** — show what happens after running a command
 19. **Warnings/tips from docs are CalloutScene** — distinct styled cards, not embedded in code scenes
 20. **Pacing varies by complexity** — simple steps are 4-5s, complex code walkthroughs are 8-12s
 
