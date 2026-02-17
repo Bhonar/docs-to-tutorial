@@ -8,8 +8,8 @@ dist/
 .env
 .env.local
 
-# Claude Code local settings (machine-specific paths and permissions)
-.claude/settings.local.json
+# Claude Code (local settings + skills are user-specific, not repo content)
+.claude/
 
 # OS files
 .DS_Store
