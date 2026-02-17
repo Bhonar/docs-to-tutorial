@@ -111,32 +111,31 @@ Returns:
 
 Write a narration script following the **tutorial arc**. Each paragraph becomes one scene — **one step per paragraph, one paragraph per scene**:
 
-- **Intro** (4-6s) — "Let's learn how to [topic] with [technology]"
-- **Overview** (5-8s) — What this covers, prerequisites
+- **Intro** — 1-2 sentences. "Let's learn how to [topic] with [technology]"
 - **Step 1** — First step only. "First, let's install..."
 - **Step 2** — Second step only. "Next, we'll configure..."
 - **Step 3** — Third step only. "Now let's create..."
 - ... (one paragraph per step, as many as the docs require)
-- **Key Takeaways** (5-8s) — Recap the important points
-- **Next Steps** (3-5s) — What to explore next, reference to docs
+- **Summary** — Recap what was covered, what to explore next
 
 **⚠️ CRITICAL:** Do NOT combine multiple steps into a single paragraph. Each step gets its own narration paragraph and its own visual scene. If the docs have 5 steps, the narration must have 5 separate step paragraphs.
 
-**Pacing — match narration length to complexity:**
+**Pacing — how much narration to write per step** (scene duration is derived from timecodes, not from this table):
 
-| Step complexity | Narration length | Result | Example |
-|----------------|-----------------|--------|---------|
-| Simple command | 1-2 sentences (~15 words) | 4-5s scene | `npm install stripe` |
-| Config/setup | 2-3 sentences (~30 words) | 6-8s scene | Setting env variables |
-| Code with explanation | 3-5 sentences (~50 words) | 8-12s scene | Writing an API route |
-| Multi-part concept | 4-6 sentences (~60 words) | 10-14s scene | Explaining auth flow |
+| Step complexity | Narration to write | Example |
+|----------------|-------------------|---------|
+| Simple command | 1-2 sentences (~15 words) | `npm install stripe` |
+| Config/setup | 2-3 sentences (~30 words) | Setting env variables |
+| Code with explanation | 3-5 sentences (~50 words) | Writing an API route |
+| Multi-part concept | 4-6 sentences (~60 words) | Explaining auth flow |
 
-Write shorter paragraphs for "do this" steps, longer paragraphs for "understand this" steps. Simple steps: be concise. Complex steps: explain WHY, not just WHAT.
+Write shorter paragraphs for "do this" steps, longer for "understand this" steps. The timecodes will automatically make simple scenes shorter and complex scenes longer.
 
 Guidelines:
 - Instructional tone, use "we" and "let's" (collaborative, not lecturing)
 - Mention specific function/class names from the code
 - Every step paragraph should describe exactly what the viewer will see on screen
+- **Avoid abbreviations with periods** (e.g., "Dr.", "vs.", "e.g.") — the timecode system splits on `.!?` and abbreviations cause misaligned sentence counts
 
 **Call `generate_audio`** with:
 - `musicStyle` — `ambient` or `lo-fi`
@@ -163,7 +162,7 @@ Write the full composition at `remotion/src/compositions/Generated.tsx`.
 #### Quick Reference — Every Step Scene Must Have:
 
 1. **`<StepIndicator>`** — progress dots showing "Step N of M" (top-right)
-2. **Staged reveals** — elements appear one by one (title → badge → code → highlight), 10-15 frames apart
+2. **Staged reveals synced to timecodes** — each visual element appears at a `getRevealFrame()` value matching the narrator's sentence
 3. **Typing effect** — all code/commands type character-by-character with blinking cursor
 4. **Code highlighting** — for multi-line code, spotlight the key line, dim the rest
 5. **Result scene after commands** — show `✓ Success` output after install/build commands
@@ -321,6 +320,7 @@ const CalloutCard: React.FC<{
    const revealFrame = Math.round((timecode.start - sceneStart) * fps);
    ```
 4. Each sentence = a visual change. 3 sentences in a scene = 3 visual moments at 3 different `revealFrame` values.
+5. **Account for transitions** — `TransitionSeries.Transition` overlaps adjacent scenes. Use short transitions (8-10 frames) and make sure the first reveal in each scene starts at least 10 frames in (after the transition finishes).
 - **NEVER hardcode** `durationInFrames={5 * fps}` — always derive from timecodes
 - NEVER have a scene where the narrator talks while the screen stays static
 
@@ -385,7 +385,9 @@ const { fontFamily } = loadFont('normal', { weights: ['400', '700'], subsets: ['
 
 type Timecode = { start: number; end: number; text: string };
 
-/** Group the flat timecodes array into per-scene groups using narration paragraphs */
+/** Group the flat timecodes array into per-scene groups using narration paragraphs.
+ *  IMPORTANT: This splits on [.!?] — avoid abbreviations (e.g., "e.g.", "Dr.") in narration
+ *  as they create extra sentence boundaries. Write clean sentences with no mid-sentence periods. */
 function groupTimecodesByScene(timecodes: Timecode[], paragraphs: string[]): Timecode[][] {
   const groups: Timecode[][] = [];
   let idx = 0;
@@ -533,6 +535,24 @@ const CodeScene: React.FC<{
   );
 };
 
+const ResultScene: React.FC<{ command: string; output: string; sceneTimecodes: Timecode[] }> = ({ command, output, sceneTimecodes }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const s0 = sceneTimecodes[0]?.start ?? 0;
+  const outputFrame = sceneTimecodes[1] ? getRevealFrame(sceneTimecodes[1], s0, fps) : 15;
+  const outputOpacity = interpolate(frame, [outputFrame, outputFrame + 15], [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+
+  return (
+    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117', padding: 60 }}>
+      <div style={{ width: '75%', background: '#161b22', borderRadius: 8, padding: 24, fontFamily: 'monospace', fontSize: 18 }}>
+        <div style={{ color: '#8b949e' }}>$ {command}</div>
+        <div style={{ color: '#3fb950', marginTop: 12, opacity: outputOpacity }}>{output}</div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 const CalloutScene: React.FC<{ type: 'warning' | 'tip' | 'note'; message: string; colors: any }> = ({ type, message, colors }) => {
   return (
     <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -580,6 +600,7 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
   const narrationParagraphs = [
     "Let's learn how to integrate Stripe payments into your app.",
     "First, install the Stripe SDK. Run npm install stripe in your terminal.",
+    "The package installed successfully. Three packages added in two seconds.",
     "Now create a checkout session. Import Stripe and configure it with your API key. The key line is line_items where we define what the customer is buying.",
     "Important: never expose your secret key in client-side code.",
     "Finally, add your API key to the environment. Create a dot env file with your Stripe key.",
@@ -606,8 +627,15 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 8 })} presentation={slide()} />
 
-        {/* Scene 3: Code walkthrough — highlight synced to sentence 3 */}
+        {/* Scene 3: Install result — output synced to sentence */}
         <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[2], fps)}>
+          <ResultScene command="npm install @stripe/stripe-js" output="✓ Added 3 packages in 2.1s"
+            sceneTimecodes={scenes[2]} />
+        </TransitionSeries.Sequence>
+        <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 10 })} presentation={fade()} />
+
+        {/* Scene 4: Code walkthrough — highlight synced to sentence 3 */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[3], fps)}>
           <CodeScene title="Create the checkout session"
             lines={[
               "import Stripe from 'stripe';",
@@ -619,28 +647,28 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
               "});",
             ]}
             highlightLine={3}
-            stepNumber={2} totalSteps={totalSteps} branding={branding} sceneTimecodes={scenes[2]} />
+            stepNumber={2} totalSteps={totalSteps} branding={branding} sceneTimecodes={scenes[3]} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 10 })} presentation={fade()} />
 
-        {/* Scene 4: Warning callout */}
-        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[3], fps)}>
+        {/* Scene 5: Warning callout */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[4], fps)}>
           <CalloutScene type="warning" message="Never expose your secret key in client-side code."
             colors={branding.colors} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 10 })} presentation={fade()} />
 
-        {/* Scene 5: Config step */}
-        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[4], fps)}>
+        {/* Scene 6: Config step */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[5], fps)}>
           <CommandScene title="Add your API key" command="echo STRIPE_KEY=sk_test_... >> .env"
-            stepNumber={3} totalSteps={totalSteps} branding={branding} sceneTimecodes={scenes[4]} />
+            stepNumber={3} totalSteps={totalSteps} branding={branding} sceneTimecodes={scenes[5]} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={linearTiming({ durationInFrames: 10 })} presentation={fade()} />
 
-        {/* Scene 6: Summary — each recap item synced to a sentence */}
-        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[5], fps)}>
+        {/* Scene 7: Summary — each recap item synced to a sentence */}
+        <TransitionSeries.Sequence durationInFrames={getSceneDuration(scenes[6], fps)}>
           <SummaryScene steps={['Installed the Stripe SDK', 'Created a checkout session', 'Configured the API key']}
-            branding={branding} sceneTimecodes={scenes[5]} />
+            branding={branding} sceneTimecodes={scenes[6]} />
         </TransitionSeries.Sequence>
       </TransitionSeries>
     </AbsoluteFill>
@@ -684,23 +712,23 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 10. **Scene components receive `sceneTimecodes` prop** — reveals use `getRevealFrame()` not fixed frame offsets
 
 **Scene structure:**
-10. Has intro scene and summary scene
-11. **Each scene explains exactly ONE step** — no scene combines two steps
-12. **No scene has a numbered list of steps** — if you see "1. … 2. … 3. …" in a scene, it must be split
-13. **Every scene has at least 30% empty space** — if it looks crowded, remove content or split
-14. **Every narration paragraph has a matching visual scene** — no explanation without a visual
-15. **Every sentence in the narration has a matching visual change** — the screen NEVER stays static while the narrator keeps talking
-16. **No scene has more than 3 sentences of narration** — if it does, split into two scenes
-17. Narration content matches visual progression 1:1
+11. Has intro scene and summary scene
+12. **Each scene explains exactly ONE step** — no scene combines two steps
+13. **No scene has a numbered list of steps** — if you see "1. … 2. … 3. …" in a scene, it must be split
+14. **Every scene has at least 30% empty space** — if it looks crowded, remove content or split
+15. **Every narration paragraph has a matching visual scene** — no explanation without a visual
+16. **Every sentence in the narration has a matching visual change** — the screen NEVER stays static while the narrator keeps talking
+17. **No scene has more than 3 sentences of narration** — if it does, split into two scenes
+18. Narration content matches visual progression 1:1
 
 **Tutorial quality:**
-18. **All code/commands use TypingText** — characters appear one by one with blinking cursor
-19. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
-20. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
-21. **Elements appear in stages synced to timecodes** — each reveal at a `getRevealFrame()` value, never all at once
-22. **Command scenes are followed by ResultScene** — show what happens after running a command
-23. **Warnings/tips from docs are CalloutScene** — distinct styled cards, not embedded in code scenes
-24. **Pacing driven by timecodes** — scene durations match narration length, not arbitrary guesses
+19. **All code/commands use TypingText** — characters appear one by one with blinking cursor
+20. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
+21. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
+22. **Elements appear in stages synced to timecodes** — each reveal at a `getRevealFrame()` value, never all at once
+23. **Command scenes are followed by ResultScene** — show `✓ Success` output after running a command
+24. **Warnings/tips from docs are CalloutScene** — distinct styled cards, not embedded in code scenes
+25. **Pacing driven by timecodes** — scene durations match narration length, not arbitrary guesses
 
 **Call `render_video`** with:
 - `inputProps` — full props (content, branding, audio, metadata, duration)
