@@ -109,14 +109,21 @@ Returns:
 
 ### Step 4: Write Narration Script & Generate Audio
 
-Write a narration script following the **tutorial arc**. Each paragraph becomes one scene — **one step per paragraph, one paragraph per scene**:
+Write a **short, punchy** narration script. Each paragraph becomes one scene — **one step per paragraph, one paragraph per scene**:
 
-- **Intro** — 1-2 sentences. "Let's learn how to [topic] with [technology]"
-- **Step 1** — First step only. "First, let's install..."
-- **Step 2** — Second step only. "Next, we'll configure..."
-- **Step 3** — Third step only. "Now let's create..."
+- **Intro** — 1 sentence. "Let's set up [topic] with [technology]."
+- **Step 1** — 1-2 sentences max. "First, install the SDK."
+- **Step 2** — 1-2 sentences max. "Next, configure your API key."
+- **Step 3** — 1-2 sentences max. "Now create the checkout session."
 - ... (one paragraph per step, as many as the docs require)
-- **Summary** — Recap what was covered, what to explore next
+- **Summary** — 1-2 sentences. "That covers the basics. Check the docs to explore webhooks and subscriptions."
+
+> **⚠️ KEEP IT SHORT.** The narration is a voiceover for a visual tutorial, not a lecture.
+> The visuals do the heavy lifting — the narration just guides attention.
+> - **Most steps need only 1 sentence.** Say what to do, not how it works.
+> - **Maximum 2 sentences per step.** If you need 3+, split into two scenes.
+> - **Cut filler words.** No "Now let's go ahead and..." — just "Install the SDK."
+> - **Total video: 30-60 seconds.** Aim for the shortest video that covers all steps.
 
 **⚠️ CRITICAL:** Do NOT combine multiple steps into a single paragraph. Each step gets its own narration paragraph and its own visual scene. If the docs have 5 substeps (like "visit the site, click settings, create key, name it, copy it"), write 5 separate paragraphs — the agent creates one scene per paragraph, so combining them forces multiple steps into one scene, which is the #1 quality failure.
 
@@ -124,18 +131,17 @@ Write a narration script following the **tutorial arc**. Each paragraph becomes 
 
 | Step complexity | Narration to write | Example |
 |----------------|-------------------|---------|
-| Simple command | 1-2 sentences (~15 words) | `npm install stripe` |
-| Config/setup | 2-3 sentences (~30 words) | Setting env variables |
-| Code with explanation | 3-5 sentences (~50 words) | Writing an API route |
-| Multi-part concept | 4-6 sentences (~60 words) | Explaining auth flow |
+| Simple command | 1 sentence (~8 words) | "Install Stripe with npm." |
+| Config/setup | 1-2 sentences (~15 words) | "Add your API key to the env file." |
+| Code with explanation | 2 sentences (~20 words) | "Create the checkout session. The key line is line_items." |
+| Multi-part concept | 2 sentences (~25 words) | "Configure the webhook endpoint. This listens for payment events." |
 
-Write shorter paragraphs for "do this" steps, longer for "understand this" steps. The timecodes will automatically make simple scenes shorter and complex scenes longer.
-
-Guidelines:
-- Instructional tone, use "we" and "let's" (collaborative, not lecturing)
-- Mention specific function/class names from the code
-- Every step paragraph should describe exactly what the viewer will see on screen
-- **Avoid abbreviations with periods** (e.g., "Dr.", "vs.", "e.g.") — the timecode system splits on `.!?` and abbreviations cause misaligned sentence counts
+**Guidelines:**
+- Short and direct — say what to do, let the visuals show how
+- Use "we" and "let's" sparingly — prefer imperative: "Install the SDK" over "Let's go ahead and install the SDK"
+- Mention specific function/class names only when the viewer needs to see them
+- **Avoid abbreviations with periods** ("Dr.", "vs.") — the timecode system splits on `.!?` and abbreviations cause misaligned sentence counts
+- **No filler phrases:** "Now let's go ahead and", "What we're going to do next is", "As you can see" — cut all of these
 
 **Call `generate_audio`** with:
 - `musicStyle` — `ambient` or `lo-fi`
@@ -683,13 +689,13 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
   // --- Timecode-driven timing ---
   const timecodes: Timecode[] = audio.narration?.timecodes ?? [];
   const narrationParagraphs = [
-    "Let's learn how to integrate Stripe payments into your app.",
-    "First, install the Stripe SDK. Run npm install stripe in your terminal.",
-    "The package installed successfully. Three packages added in two seconds.",
-    "Now create a checkout session. Import Stripe and configure it with your API key. The key line is line_items where we define what the customer is buying.",
-    "Important: never expose your secret key in client-side code.",
-    "Finally, add your API key to the environment. Create a dot env file with your Stripe key.",
-    "That's everything we covered. You installed Stripe, created a checkout session, and configured your API key.",
+    "Set up Stripe payments in your app.",
+    "Install the Stripe SDK.",
+    "Package installed successfully.",
+    "Create a checkout session. The key line is line_items.",
+    "Never expose your secret key in client-side code.",
+    "Add your API key to the environment.",
+    "That covers installing Stripe, creating a checkout, and configuring your key.",
   ];
   const scenes = groupTimecodesByScene(timecodes, narrationParagraphs);
 
