@@ -164,6 +164,66 @@ async function generateNarration(script: string, warnings: string[], remotionPro
   return { url: '', localPath: '', staticPath: '', timecodes: [] };
 }
 
+/**
+ * Derive sentence-level timecodes from character-level alignment data.
+ * Splits on sentence boundaries (. ! ?) and finds the start/end times
+ * from the actual audio alignment — no WPM estimation needed.
+ */
+function deriveTimcodesFromAlignment(
+  alignment: { characters: string[]; character_start_times_seconds: number[]; character_end_times_seconds: number[] },
+  script: string,
+): Array<{ start: number; end: number; text: string }> {
+  const timecodes: Array<{ start: number; end: number; text: string }> = [];
+  const chars = alignment.characters;
+  const starts = alignment.character_start_times_seconds;
+  const ends = alignment.character_end_times_seconds;
+
+  // Walk through the original script and find sentence boundaries
+  const sentences = script.split(/([.!?]+)/).reduce<string[]>((acc, part, i, arr) => {
+    // Recombine: text + punctuation pairs
+    if (i % 2 === 0 && part.trim()) {
+      const punct = arr[i + 1] || '';
+      acc.push((part + punct).trim());
+    }
+    return acc;
+  }, []);
+
+  let charIdx = 0;
+
+  for (const sentence of sentences) {
+    if (!sentence.trim()) continue;
+
+    // Find where this sentence starts in the alignment chars
+    // Skip whitespace chars to find the first real character
+    while (charIdx < chars.length && chars[charIdx].trim() === '') {
+      charIdx++;
+    }
+
+    const sentenceStart = charIdx < starts.length ? starts[charIdx] : (timecodes.length > 0 ? timecodes[timecodes.length - 1].end + 0.3 : 0);
+
+    // Advance charIdx through the sentence's characters
+    let sentenceCharCount = 0;
+    for (const ch of sentence) {
+      if (charIdx + sentenceCharCount < chars.length) {
+        sentenceCharCount++;
+      }
+    }
+
+    const endCharIdx = Math.min(charIdx + sentenceCharCount - 1, ends.length - 1);
+    const sentenceEnd = endCharIdx >= 0 ? ends[endCharIdx] : sentenceStart + 1;
+
+    timecodes.push({
+      start: sentenceStart,
+      end: sentenceEnd,
+      text: sentence.replace(/[.!?]+$/, '').trim(),
+    });
+
+    charIdx += sentenceCharCount;
+  }
+
+  return timecodes;
+}
+
 async function generateNarrationElevenLabs(
   script: string,
   apiKey: string,
@@ -173,43 +233,93 @@ async function generateNarrationElevenLabs(
   // ElevenLabs premade voices (professional narration)
   const voiceId = process.env.ELEVENLABS_VOICE_ID || 'jsCqWAovK2LkecY7zXl4'; // Freya - expressive young woman
 
-  console.error(`Using ElevenLabs TTS (voice: ${voiceId})...`);
+  console.error(`Using ElevenLabs TTS with timestamps (voice: ${voiceId})...`);
 
-  // output_format is a query parameter, not a body parameter
-  const response = await axios.post(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
-    {
-      text: script,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: {
-        stability: 0.6,
-        similarity_boost: 0.75,
+  // Use /with-timestamps endpoint for real audio-aligned timecodes
+  let timecodes: Array<{ start: number; end: number; text: string }>;
+  let audioBuffer: Buffer;
+
+  try {
+    const response = await axios.post(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`,
+      {
+        text: script,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.6,
+          similarity_boost: 0.75,
+        },
       },
-    },
-    {
-      headers: {
-        'xi-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      responseType: 'arraybuffer',
-      timeout: 60000,
+      {
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        responseType: 'json',
+        timeout: 60000,
+      }
+    );
+
+    // /with-timestamps returns JSON with audio_base64 and alignment
+    const data = response.data;
+    if (!data.audio_base64) {
+      console.error('⚠️  No audio_base64 in response');
+      warnings.push('ElevenLabs /with-timestamps returned no audio data');
+      return null;
     }
-  );
 
-  // ElevenLabs returns binary audio directly
-  const buffer = Buffer.from(response.data);
-  if (buffer.length < 1000) {
-    // Likely an error response, not audio
-    const text = buffer.toString('utf-8');
-    console.error('⚠️  ElevenLabs returned non-audio response:', text.substring(0, 200));
-    warnings.push(`ElevenLabs TTS returned non-audio response (${buffer.length} bytes): ${text.substring(0, 100)}`);
-    return null;
+    audioBuffer = Buffer.from(data.audio_base64, 'base64');
+
+    if (data.alignment) {
+      timecodes = deriveTimcodesFromAlignment(data.alignment, script);
+      console.error(`✓ Real timecodes derived from alignment (${timecodes.length} sentences)`);
+    } else {
+      // Fallback: alignment missing, estimate
+      console.error('⚠️  No alignment data in response, falling back to estimated timecodes');
+      warnings.push('ElevenLabs returned audio but no alignment data — timecodes are estimated');
+      timecodes = createNarrationTimecodes(script);
+    }
+
+  } catch (timestampError) {
+    // Fallback: /with-timestamps failed, try regular endpoint
+    const msg = timestampError instanceof Error ? timestampError.message : String(timestampError);
+    console.error(`⚠️  /with-timestamps failed (${msg}), falling back to regular TTS...`);
+    warnings.push(`ElevenLabs /with-timestamps failed: ${msg}. Using estimated timecodes.`);
+
+    const response = await axios.post(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+      {
+        text: script,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.6,
+          similarity_boost: 0.75,
+        },
+      },
+      {
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        responseType: 'arraybuffer',
+        timeout: 60000,
+      }
+    );
+
+    audioBuffer = Buffer.from(response.data);
+    if (audioBuffer.length < 1000) {
+      const text = audioBuffer.toString('utf-8');
+      console.error('⚠️  ElevenLabs returned non-audio response:', text.substring(0, 200));
+      warnings.push(`ElevenLabs TTS returned non-audio response (${audioBuffer.length} bytes): ${text.substring(0, 100)}`);
+      return null;
+    }
+
+    timecodes = createNarrationTimecodes(script);
   }
 
-  const { localPath, staticPath } = await saveAudioBuffer(buffer, 'narration', remotionProjectPath);
-  const timecodes = createNarrationTimecodes(script);
+  const { localPath, staticPath } = await saveAudioBuffer(audioBuffer, 'narration', remotionProjectPath);
 
-  console.error(`✓ ElevenLabs narration saved (${(buffer.length / 1024).toFixed(0)} KB)`);
+  console.error(`✓ ElevenLabs narration saved (${(audioBuffer.length / 1024).toFixed(0)} KB, ${timecodes.length} timecodes)`);
 
   return {
     url: '',

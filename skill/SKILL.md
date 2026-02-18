@@ -154,7 +154,7 @@ Write a **short, punchy** narration script. Each paragraph becomes one scene —
 **Save returned values:**
 - `audio.music.staticPath`
 - `audio.narration.staticPath`
-- `audio.narration.timecodes` — array of `{start: number, end: number, text: string}` per sentence. **You MUST use these to time scene durations and visual reveals in Step 5.** Do NOT guess frame numbers.
+- `audio.narration.timecodes` — array of `{start: number, end: number, text: string}` per sentence, derived from **real audio alignment** (not estimated). **You MUST use these to time scene durations and visual reveals in Step 5.** Do NOT guess frame numbers.
 - `audio.beats`
 
 **Also save your narration paragraphs** as a list — you'll need them in Step 5 to map timecodes to scenes.
@@ -476,21 +476,40 @@ const { fontFamily } = loadFont('normal', { weights: ['400', '700'], subsets: ['
 
 type Timecode = { start: number; end: number; text: string };
 
-/** Group the flat timecodes array into per-scene groups using narration paragraphs.
- *  IMPORTANT: This splits on [.!?] — avoid abbreviations with periods ("Dr.", "vs.")
- *  in narration as they create extra sentence boundaries. Write clean sentences
- *  with no mid-sentence periods. */
+/** Group the flat timecodes array into per-scene groups by matching timecode text
+ *  to narration paragraphs. Each timecode's `.text` is checked against each paragraph —
+ *  if the paragraph contains that text, the timecode belongs to that scene.
+ *  This avoids period-splitting issues ("Dr.", "vs.") since it uses the actual
+ *  timecodes returned by the TTS engine. */
 function groupTimecodesByScene(timecodes: Timecode[], paragraphs: string[]): Timecode[][] {
-  const groups: Timecode[][] = [];
-  let idx = 0;
-  for (const para of paragraphs) {
-    const sentenceCount = para.split(/[.!?]+/).filter(s => s.trim()).length;
-    const group: Timecode[] = [];
-    for (let i = 0; i < sentenceCount && idx < timecodes.length; i++) {
-      group.push(timecodes[idx]);
-      idx++;
+  const groups: Timecode[][] = paragraphs.map(() => []);
+  let paraIdx = 0;
+
+  for (const tc of timecodes) {
+    // Find which paragraph this timecode belongs to by checking if its text
+    // appears in the paragraph (starting from current paragraph, moving forward)
+    let placed = false;
+    for (let p = paraIdx; p < paragraphs.length; p++) {
+      const normalizedPara = paragraphs[p].toLowerCase().replace(/[^a-z0-9 ]/g, '');
+      const normalizedTc = tc.text.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+      if (normalizedPara.includes(normalizedTc) || normalizedTc.includes(normalizedPara.slice(0, 20))) {
+        groups[p].push(tc);
+        paraIdx = p;
+        placed = true;
+        break;
+      }
     }
-    groups.push(group);
+    // If timecode text didn't match any paragraph, assign to next paragraph that has no timecodes yet
+    if (!placed) {
+      // Advance to next paragraph if current one already has timecodes and this tc starts later
+      if (paraIdx < paragraphs.length - 1 && groups[paraIdx].length > 0 &&
+          tc.start > groups[paraIdx][groups[paraIdx].length - 1].end + 0.1) {
+        paraIdx++;
+      }
+      if (paraIdx < groups.length) {
+        groups[paraIdx].push(tc);
+      }
+    }
   }
   return groups;
 }
