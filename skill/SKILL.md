@@ -118,7 +118,7 @@ Write a narration script following the **tutorial arc**. Each paragraph becomes 
 - ... (one paragraph per step, as many as the docs require)
 - **Summary** — Recap what was covered, what to explore next
 
-**⚠️ CRITICAL:** Do NOT combine multiple steps into a single paragraph. Each step gets its own narration paragraph and its own visual scene. If the docs have 5 steps, the narration must have 5 separate step paragraphs.
+**⚠️ CRITICAL:** Do NOT combine multiple steps into a single paragraph. Each step gets its own narration paragraph and its own visual scene. If the docs have 5 substeps (like "visit the site, click settings, create key, name it, copy it"), write 5 separate paragraphs — the agent creates one scene per paragraph, so combining them forces multiple steps into one scene, which is the #1 quality failure.
 
 **Pacing — how much narration to write per step** (scene duration is derived from timecodes, not from this table):
 
@@ -161,12 +161,72 @@ Write the full composition at `remotion/src/compositions/Generated.tsx`.
 
 #### Quick Reference — Every Step Scene Must Have:
 
-1. **`<StepIndicator>`** — progress dots showing "Step N of M" (top-right)
-2. **Staged reveals synced to timecodes** — each visual element appears at a `getRevealFrame()` value matching the narrator's sentence
-3. **Typing effect** — all code/commands type character-by-character with blinking cursor
-4. **Code highlighting** — for multi-line code, spotlight the key line, dim the rest
-5. **Result scene after commands** — show `✓ Success` output after install/build commands
-6. **Callout scenes** — warnings/tips from docs get their own styled card scene
+1. **`<SafeZone>`** — every scene wraps content in SafeZone (centered 1200px column, consistent padding)
+2. **`<StepIndicator>`** — progress dots showing "Step N of M" (top-right)
+3. **Staged reveals synced to timecodes** — each visual element appears at a `getRevealFrame()` value matching the narrator's sentence
+4. **Typing effect** — all code/commands type character-by-character with blinking cursor
+5. **Code highlighting** — for multi-line code, spotlight the key line, dim the rest
+6. **Result scene after commands** — show `✓ Success` output after install/build commands
+7. **Callout scenes** — warnings/tips from docs get their own styled card scene
+8. **ONE step per scene** — never combine multiple steps, numbered lists, or actions into one scene
+
+---
+
+> **⚠️ SCENE SPLITTING — THE MOST COMMON MISTAKE (read this before writing ANY scene)**
+>
+> **If a scene contains a numbered list or multiple steps, it is WRONG. Stop and split it.**
+>
+> The #1 failure mode is cramming multiple steps into one scene. A scene titled "Create Your API Key"
+> that shows 5 substeps (visit site, navigate, click button, name it, copy key) is WRONG — those are 5 separate scenes.
+>
+> **Rules (violations = broken video):**
+> - ONE step, ONE idea, ONE scene. No exceptions.
+> - A numbered/bulleted list inside a scene is ALWAYS wrong.
+> - Maximum per scene: ONE title + ONE code block or ONE command + ONE supporting visual.
+> - If you catch yourself writing `1.`, `2.`, `3.` inside a single scene's JSX — STOP. Split into separate scenes.
+> - If a narration paragraph covers more than one action, split the paragraph AND the scene.
+> - A scene with a mock UI dashboard showing multiple actions is ALWAYS wrong — show one action per scene.
+>
+> **BAD — one scene with 5 steps (NEVER do this):**
+> ```jsx
+> // WRONG: All 5 steps crammed into one scene
+> <SafeZone>
+>   <h2>Create Your API Key</h2>
+>   <ol>
+>     <li>Visit console.tabstack.ai and sign in</li>
+>     <li>Navigate to API Keys</li>
+>     <li>Click "Create New API Key"</li>
+>     <li>Name it and click Create</li>
+>     <li>Copy the generated key</li>
+>   </ol>
+>   <MockDashboard />
+> </SafeZone>
+> ```
+>
+> **GOOD — 5 separate scenes, one step each:**
+> ```jsx
+> // Scene 3: Navigate to console
+> <SafeZone><Card><h2>Sign In to the Console</h2>
+>   <MockBrowserBar url="console.tabstack.ai" /></Card></SafeZone>
+>
+> // Scene 4: Find API Keys section
+> <SafeZone><Card><h2>Navigate to API Keys</h2>
+>   <MockSidebar activeItem="API Keys" /></Card></SafeZone>
+>
+> // Scene 5: Create the key
+> <SafeZone><Card><h2>Create a New API Key</h2>
+>   <MockButton label="+ Create New API Key" /></Card></SafeZone>
+>
+> // Scene 6: Name the key
+> <SafeZone><Card><h2>Name Your Key</h2>
+>   <MockInput value="Development" /></Card></SafeZone>
+>
+> // Scene 7: Copy the key
+> <SafeZone><Card><h2>Copy Your API Key</h2>
+>   <MockKeyDisplay value="ts_live_xxxx..." /></Card></SafeZone>
+> ```
+>
+> **Count your scenes.** If the documentation has N steps, you need at least N+2 scenes (intro + N steps + summary).
 
 ---
 
@@ -294,6 +354,32 @@ const CalloutCard: React.FC<{
 };
 ```
 
+**SafeZone — content container (REQUIRED on every scene):**
+
+Every scene component MUST wrap its content in `<SafeZone>`. This constrains all content to a centered 1200px column with consistent padding. NEVER place content directly in `<AbsoluteFill>` without SafeZone. Pass the scene background via the `background` prop.
+
+```typescript
+const SafeZone: React.FC<{
+  children: React.ReactNode;
+  background?: string;
+}> = ({ children, background }) => (
+  <AbsoluteFill style={{
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: background ?? 'transparent',
+  }}>
+    <div style={{
+      width: '100%', maxWidth: 1200,
+      padding: '60px 80px',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      height: '100%',
+    }}>
+      {children}
+    </div>
+  </AbsoluteFill>
+);
+```
+
 ---
 
 #### Scene Design Rules
@@ -324,21 +410,20 @@ const CalloutCard: React.FC<{
 - **NEVER hardcode** `durationInFrames={5 * fps}` — always derive from timecodes
 - NEVER have a scene where the narrator talks while the screen stays static
 
-**ONE step, ONE idea, ONE scene:**
-- If a scene has more than ONE command, ONE code block, or ONE concept — SPLIT it
-- A scene with a numbered list (Step 1, Step 2, Step 3…) is ALWAYS wrong — each becomes its own scene
-- If narration for a step is longer than 3 sentences, split it into two scenes
+> **⚠️ SCENE SPLITTING (see full rules + BAD/GOOD example at top of Step 5):**
+> - ONE step, ONE idea, ONE scene. If a scene has more than ONE command, ONE code block, or ONE concept — SPLIT it.
+> - A scene with a numbered list is ALWAYS wrong — each item becomes its own scene.
+> - A scene with a mock UI dashboard showing multiple actions is ALWAYS wrong — show one action per scene.
+> - If narration for a step is longer than 3 sentences, split it into two scenes.
+> - Maximum per scene: ONE title + ONE code block OR ONE command + ONE supporting visual.
+> - If you have more content, it belongs in the NEXT scene.
 
-**Maximum content per scene:**
-- ONE title/heading
-- ONE code block OR ONE command OR ONE short explanation (1-2 sentences)
-- ONE supporting visual (mock UI, terminal output, or diagram)
-- If you have more content, it belongs in the NEXT scene
-
-**Whitespace and spacing.** Every scene should feel spacious, not cramped:
-- Use generous padding (40-60px on all sides)
+**Whitespace, spacing, and safe zones.** Every scene must feel spacious, not cramped:
+- **Every scene MUST use `<SafeZone>`** to contain its content — never place content directly in `<AbsoluteFill>`
+- SafeZone constrains content to a centered 1200px column with 60px vertical / 80px horizontal padding
 - Leave at least 30% of the scene area as empty space
 - Text should never touch the edges of containers
+- No element should extend beyond the SafeZone boundary — no mock UIs pushed to screen edges
 - If content feels tight, you have too much — split into two scenes
 
 **Staged reveals in every scene.** Time each reveal to a sentence's `revealFrame`:
@@ -415,7 +500,7 @@ function getRevealFrame(tc: Timecode, sceneStart: number, fps: number): number {
   return Math.round((tc.start - sceneStart) * fps);
 }
 
-// === Reusable helpers (StepIndicator, TypingText, HighlightedCode, CalloutCard) ===
+// === Reusable helpers (SafeZone, StepIndicator, TypingText, HighlightedCode, CalloutCard) ===
 // ... paste the helper components from above here ...
 
 // === Scene Components (accept sceneTimecodes for timing) ===
@@ -440,10 +525,9 @@ const IntroScene: React.FC<{
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
-    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: `linear-gradient(135deg, ${branding.colors.primary}, ${branding.colors.secondary})` }}>
-      <div style={{ transform: `scale(${cardScale})`, opacity: cardOpacity }}>
-        <Card className="p-8 max-w-2xl">
+    <SafeZone background={`linear-gradient(135deg, ${branding.colors.primary}, ${branding.colors.secondary})`}>
+      <div style={{ transform: `scale(${cardScale})`, opacity: cardOpacity, width: '100%' }}>
+        <Card className="p-8">
           <div style={{ opacity: titleOpacity }}>
             <h1 style={{ fontSize: height * 0.07, fontWeight: 700 }}>{content.title}</h1>
           </div>
@@ -453,7 +537,7 @@ const IntroScene: React.FC<{
           </div>
         </Card>
       </div>
-    </AbsoluteFill>
+    </SafeZone>
   );
 };
 
@@ -479,23 +563,24 @@ const CommandScene: React.FC<{
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
-    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: `linear-gradient(135deg, ${colors.primary}11, ${colors.secondary}11)`, padding: 60 }}>
+    <>
+      <SafeZone background={`linear-gradient(135deg, ${colors.primary}11, ${colors.secondary}11)`}>
+        <div style={{ opacity: cardOpacity, width: '100%' }}>
+          <Card className="p-8">
+            <div style={{ opacity: titleOpacity }}>
+              <Badge className="mb-4">Step {stepNumber}</Badge>
+              <h2 style={{ fontSize: 32, fontWeight: 700, marginBottom: 16 }}>{title}</h2>
+            </div>
+            <div style={{ opacity: termOpacity, background: '#1a1a2e', borderRadius: 8, padding: 24,
+              fontFamily: 'monospace', fontSize: 20, color: '#00ff88' }}>
+              <span style={{ color: '#888' }}>$ </span>
+              <TypingText text={command} startFrame={termFrame + 5} charsPerFrame={0.5} />
+            </div>
+          </Card>
+        </div>
+      </SafeZone>
       <StepIndicator current={stepNumber} total={totalSteps} colors={colors} />
-      <div style={{ opacity: cardOpacity, width: '80%' }}>
-        <Card className="p-8">
-          <div style={{ opacity: titleOpacity }}>
-            <Badge className="mb-4">Step {stepNumber}</Badge>
-            <h2 style={{ fontSize: 32, fontWeight: 700, marginBottom: 16 }}>{title}</h2>
-          </div>
-          <div style={{ opacity: termOpacity, background: '#1a1a2e', borderRadius: 8, padding: 24,
-            fontFamily: 'monospace', fontSize: 20, color: '#00ff88' }}>
-            <span style={{ color: '#888' }}>$ </span>
-            <TypingText text={command} startFrame={termFrame + 5} charsPerFrame={0.5} />
-          </div>
-        </Card>
-      </div>
-    </AbsoluteFill>
+    </>
   );
 };
 
@@ -520,19 +605,20 @@ const CodeScene: React.FC<{
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
-    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: `linear-gradient(135deg, ${colors.primary}11, ${colors.secondary}11)`, padding: 60 }}>
+    <>
+      <SafeZone background={`linear-gradient(135deg, ${colors.primary}11, ${colors.secondary}11)`}>
+        <div style={{ opacity: cardOpacity, width: '100%' }}>
+          <div style={{ opacity: titleOpacity }}>
+            <Badge className="mb-4">Step {stepNumber}</Badge>
+            <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 16, color: '#fff' }}>{title}</h2>
+          </div>
+          <div style={{ opacity: codeOpacity }}>
+            <HighlightedCode lines={lines} highlightLine={highlightLine} startFrame={codeFrame + 15} colors={colors} />
+          </div>
+        </div>
+      </SafeZone>
       <StepIndicator current={stepNumber} total={totalSteps} colors={colors} />
-      <div style={{ opacity: cardOpacity, width: '85%' }}>
-        <div style={{ opacity: titleOpacity }}>
-          <Badge className="mb-4">Step {stepNumber}</Badge>
-          <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 16, color: '#fff' }}>{title}</h2>
-        </div>
-        <div style={{ opacity: codeOpacity }}>
-          <HighlightedCode lines={lines} highlightLine={highlightLine} startFrame={codeFrame + 15} colors={colors} />
-        </div>
-      </div>
-    </AbsoluteFill>
+    </>
   );
 };
 
@@ -545,21 +631,20 @@ const ResultScene: React.FC<{ command: string; output: string; sceneTimecodes: T
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
-    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117', padding: 60 }}>
-      <div style={{ width: '75%', background: '#161b22', borderRadius: 8, padding: 24, fontFamily: 'monospace', fontSize: 18 }}>
+    <SafeZone background="#0d1117">
+      <div style={{ width: '100%', background: '#161b22', borderRadius: 8, padding: 24, fontFamily: 'monospace', fontSize: 18 }}>
         <div style={{ color: '#8b949e' }}>$ {command}</div>
         <div style={{ color: '#3fb950', marginTop: 12, opacity: outputOpacity }}>{output}</div>
       </div>
-    </AbsoluteFill>
+    </SafeZone>
   );
 };
 
 const CalloutScene: React.FC<{ type: 'warning' | 'tip' | 'note'; message: string; colors: any }> = ({ type, message, colors }) => {
   return (
-    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: `${colors.primary}0a`, padding: 60 }}>
+    <SafeZone background={`${colors.primary}0a`}>
       <CalloutCard type={type} message={message} />
-    </AbsoluteFill>
+    </SafeZone>
   );
 };
 
@@ -569,9 +654,8 @@ const SummaryScene: React.FC<{ steps: string[]; branding: any; sceneTimecodes: T
   const s0 = sceneTimecodes[0]?.start ?? 0;
 
   return (
-    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: `linear-gradient(135deg, ${branding.colors.primary}, ${branding.colors.secondary})`, padding: 60 }}>
-      <Card className="p-8 max-w-2xl">
+    <SafeZone background={`linear-gradient(135deg, ${branding.colors.primary}, ${branding.colors.secondary})`}>
+      <Card className="p-8" style={{ width: '100%' }}>
         <h2 style={{ fontSize: 36, fontWeight: 700, marginBottom: 20 }}>What We Covered</h2>
         {steps.map((step, i) => {
           // Each recap item synced to a sentence timecode
@@ -586,7 +670,7 @@ const SummaryScene: React.FC<{ steps: string[]; branding: any; sceneTimecodes: T
           );
         })}
       </Card>
-    </AbsoluteFill>
+    </SafeZone>
   );
 };
 
@@ -693,6 +777,7 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 - Fonts: Load via `@remotion/google-fonts` before use
 - Duration: always from `getSceneDuration(timecodes, fps)` — NEVER hardcode `N * fps`
 - Clamp: Always use `extrapolateRight: 'clamp'` on interpolate
+- SafeZone: every scene wraps content in `<SafeZone>` — NEVER use bare `<AbsoluteFill>` with ad-hoc padding/width
 
 ---
 
@@ -711,25 +796,27 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 8. User's components render without errors in Remotion context
 9. **Scene durations use `getSceneDuration()` from timecodes** — no hardcoded `N * fps`
 10. **Scene components receive `sceneTimecodes` prop** — reveals use `getRevealFrame()` not fixed frame offsets
+11. **Every scene uses `<SafeZone>`** — no content placed directly in `<AbsoluteFill>` without the SafeZone wrapper
 
 **Scene structure:**
-11. Has intro scene and summary scene
-12. **Each scene explains exactly ONE step** — no scene combines two steps
-13. **No scene has a numbered list of steps** — if you see "1. … 2. … 3. …" in a scene, it must be split
-14. **Every scene has at least 30% empty space** — if it looks crowded, remove content or split
-15. **Every narration paragraph has a matching visual scene** — no explanation without a visual
-16. **Every sentence in the narration has a matching visual change** — the screen NEVER stays static while the narrator keeps talking
-17. **No scene has more than 3 sentences of narration** — if it does, split into two scenes
-18. Narration content matches visual progression 1:1
+12. Has intro scene and summary scene
+13. **Each scene explains exactly ONE step** — no scene combines two steps. If you see a numbered list (`1. ... 2. ... 3. ...`) in any scene's JSX, the video is BROKEN — split immediately
+14. **No numbered or bulleted lists in scenes** — if a scene renders `<ol>`, `<ul>`, or manual numbering, it MUST be split into separate scenes. This is the #1 most common mistake.
+15. **Every scene has at least 30% empty space** — if it looks crowded, remove content or split
+16. **SafeZone constrains all content** — no element extends beyond the 1200px centered column. No mock UIs pushed to screen edges. No content touching the 1920px frame boundary.
+17. **Every narration paragraph has a matching visual scene** — no explanation without a visual
+18. **Every sentence in the narration has a matching visual change** — the screen NEVER stays static while the narrator keeps talking
+19. **No scene has more than 3 sentences of narration** — if it does, split into two scenes
+20. Narration content matches visual progression 1:1
 
 **Tutorial quality:**
-19. **All code/commands use TypingText** — characters appear one by one with blinking cursor
-20. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
-21. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
-22. **Elements appear in stages synced to timecodes** — each reveal at a `getRevealFrame()` value, never all at once
-23. **Command scenes are followed by ResultScene** — show `✓ Success` output after running a command
-24. **Warnings/tips from docs are CalloutScene** — distinct styled cards, not embedded in code scenes
-25. **Pacing driven by timecodes** — scene durations match narration length, not arbitrary guesses
+21. **All code/commands use TypingText** — characters appear one by one with blinking cursor
+22. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
+23. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
+24. **Elements appear in stages synced to timecodes** — each reveal at a `getRevealFrame()` value, never all at once
+25. **Command scenes are followed by ResultScene** — show `✓ Success` output after running a command
+26. **Warnings/tips from docs are CalloutScene** — distinct styled cards, not embedded in code scenes
+27. **Pacing driven by timecodes** — scene durations match narration length, not arbitrary guesses
 
 **Call `render_video`** with:
 - `inputProps` — full props (content, branding, audio, metadata, duration)
