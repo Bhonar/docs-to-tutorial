@@ -81,7 +81,7 @@ describe.skipIf(!hasElevenLabs)('generate_audio (integration)', () => {
     await fs.mkdir(path.join(testRemotionPath, 'public', 'audio'), { recursive: true });
 
     const result = await generateAudio({
-      musicStyle: 'ambient',
+      musicStyle: 'pop',
       narrationScript: 'Welcome to this quick tutorial. Today we will learn how to get started with Stripe payments.',
       duration: 15,
       remotionProjectPath: testRemotionPath,
