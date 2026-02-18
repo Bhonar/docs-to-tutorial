@@ -102,8 +102,14 @@ Returns:
    - Headings hierarchy (scene structure)
    - Blockquotes (tips, warnings — these become callout scenes)
 
-3. **Music Style** — tutorials need calming, non-distracting music:
-   - All doc types: `ambient` or `lo-fi`
+3. **Music Style** — pick a style that matches the tutorial energy:
+   - `pop` — upbeat, energetic (good default for most tutorials)
+   - `cinematic` — dramatic, polished (product launches, feature overviews)
+   - `lo-fi` — chill, relaxed (longer guides, config walkthroughs)
+   - `hip-hop` — modern, rhythmic (developer tools, CLI tutorials)
+   - `rock` — high energy (gaming, performance topics)
+   - `jazz` — smooth, sophisticated (enterprise, fintech)
+   - `ambient` — minimal, atmospheric (only if content is very dense)
 
 ---
 
@@ -144,7 +150,7 @@ Write a **short, punchy** narration script. Each paragraph becomes one scene —
 - **No filler phrases:** "Now let's go ahead and", "What we're going to do next is", "As you can see" — cut all of these
 
 **Call `generate_audio`** with:
-- `musicStyle` — `ambient` or `lo-fi`
+- `musicStyle` — `pop`, `cinematic`, `lo-fi`, `hip-hop`, `rock`, `jazz`, or `ambient` (default to `pop` for most tutorials)
 - `narrationScript` — your script
 - `duration` — estimated total video length in seconds
 - `remotionProjectPath` — absolute path to the `remotion/` directory
