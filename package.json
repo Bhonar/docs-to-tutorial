@@ -1,10 +1,10 @@
 {
   "name": "docs-to-video",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Turn any documentation URL into a polished tutorial video using AI, Remotion, and your own React components",
   "type": "module",
   "bin": {
-    "docs-to-video": "./bin/cli.js"
+    "docs-to-video": "bin/cli.js"
   },
   "files": [
     "bin/",
@@ -40,7 +40,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Bhonar/docs-to-video.git"
+    "url": "git+https://github.com/Bhonar/docs-to-video.git"
   },
   "engines": {
     "node": ">=18.0.0"
