@@ -161,6 +161,13 @@ Write a **short, punchy** narration script. Each paragraph becomes one scene —
 - **Avoid abbreviations with periods** ("Dr.", "vs.") — the timecode system splits on `.!?` and abbreviations cause misaligned sentence counts
 - **No filler phrases:** "Now let's go ahead and", "What we're going to do next is", "As you can see" — cut all of these
 
+**Script structure for natural speech flow:**
+- Write each paragraph as one or two flowing sentences — NOT bullet points or fragments
+- Avoid choppy fragments like "Now. The key." — write "Now add the API key to your environment."
+- Connect ideas within a paragraph: "Install the SDK, then import it in your app."
+- Separate paragraphs with blank lines — these create natural pauses in the narration audio
+- Do NOT use SSML tags — ElevenLabs handles pacing from plain text and paragraph breaks
+
 **Call `generate_audio`** with:
 - `musicStyle` — `pop`, `hip-hop`, `rock`, or `jazz` (default to `pop` for most tutorials)
 - `narrationScript` — your script
@@ -378,6 +385,56 @@ const CalloutCard: React.FC<{
 };
 ```
 
+**ClickIndicator — cursor + click ripple (use when narration says "click", "select", "tap", "press"):**
+```typescript
+const ClickIndicator: React.FC<{
+  x: number;
+  y: number;
+  startFrame: number;
+  label?: string;
+}> = ({ x, y, startFrame, label }) => {
+  const frame = useCurrentFrame();
+  const rel = frame - startFrame;
+  if (rel < 0 || rel > 36) return null;
+
+  // Phase 1: cursor slides in from top-left offset
+  const cursorX = interpolate(rel, [0, 12], [x - 50, x], { extrapolateRight: 'clamp' });
+  const cursorY = interpolate(rel, [0, 12], [y - 40, y], { extrapolateRight: 'clamp' });
+  const cursorOpacity = interpolate(rel, [0, 6, 28, 36], [0, 1, 1, 0], {
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+
+  // Phase 2: click ripple expands from click point
+  const rippleScale = rel >= 14
+    ? interpolate(rel, [14, 26], [0, 2.5], { extrapolateRight: 'clamp' }) : 0;
+  const rippleOpacity = rel >= 14
+    ? interpolate(rel, [14, 26], [0.5, 0], { extrapolateRight: 'clamp' }) : 0;
+
+  return (
+    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+      {/* Cursor pointer SVG */}
+      <svg width="28" height="28" viewBox="0 0 24 24"
+        style={{ position: 'absolute', left: cursorX, top: cursorY, opacity: cursorOpacity,
+          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}>
+        <path d="M5 3l14 8-6.5 1.5L10 19z" fill="white" stroke="black" strokeWidth="1.5" />
+      </svg>
+      {/* Click ripple ring */}
+      <div style={{ position: 'absolute', left: x - 20, top: y - 20, width: 40, height: 40,
+        borderRadius: '50%', border: '3px solid rgba(255,255,255,0.8)',
+        transform: `scale(${rippleScale})`, opacity: rippleOpacity }} />
+      {/* Optional label */}
+      {label && cursorOpacity > 0.5 && (
+        <div style={{ position: 'absolute', left: x + 18, top: y - 10,
+          background: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: 12, fontWeight: 600,
+          padding: '4px 10px', borderRadius: 6, opacity: cursorOpacity, whiteSpace: 'nowrap' }}>
+          {label}
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
 **SafeZone — content container (REQUIRED on every scene):**
 
 Every scene component MUST wrap its content in `<SafeZone>`. This constrains all content to a centered 1200px column with consistent padding. NEVER place content directly in `<AbsoluteFill>` without SafeZone. Pass the scene background via the `background` prop.
@@ -459,6 +516,16 @@ const SafeZone: React.FC<{
 - Fallback if no timecodes: space reveals 10-15 frames apart
 
 **Show the result after commands.** After typing `npm install`, show a result scene with `✓ Successfully installed`. After writing code, show mock output. Use result scenes for install/build/run commands. Skip them for config-only steps.
+
+**Click indicators for interactive steps.** When narration mentions clicking, selecting, tapping, or pressing a UI element:
+1. Add `<ClickIndicator>` inside the scene, OUTSIDE `<SafeZone>` (it uses absolute positioning in the full 1920×1080 frame)
+2. Set `x` and `y` to the pixel center of the target button (SafeZone content area spans roughly x: 360–1560, y: 60–1020)
+3. Set `startFrame` to `getRevealFrame()` of the sentence mentioning the click
+4. Optionally set `label` to the button text (e.g., `label="Create API Key"`)
+5. Auto-hides after 36 frames (~1.2s at 30fps)
+
+**When to use ClickIndicator:** narration contains "click", "select", "tap", "press", "hit", "choose" AND the scene shows a mock UI with a visible button or link.
+**When NOT to use:** terminal/code scenes (no buttons), abstract concepts, intro/summary scenes.
 
 **Callouts get their own scene.** Warnings, tips, and notes from the docs become separate 3-4s scenes using `CalloutCard`. Don't embed them inside code scenes.
 
@@ -738,7 +805,17 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 
   return (
     <AbsoluteFill style={{ background: '#000', fontFamily }}>
-      {audio.music?.staticPath && <Audio src={staticFile(audio.music.staticPath)} volume={0.3} />}
+      {audio.music?.staticPath && (
+        <Audio
+          src={staticFile(audio.music.staticPath)}
+          volume={(f) => {
+            const duckFrame = getSceneDuration(scenes[0], fps);
+            return interpolate(f, [duckFrame, duckFrame + 15], [0.4, 0.15], {
+              extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+            });
+          }}
+        />
+      )}
       {audio.narration?.staticPath && <Audio src={staticFile(audio.narration.staticPath)} volume={1} />}
 
       <TransitionSeries>
@@ -810,6 +887,7 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 - **Always pass `sceneTimecodes={scenes[i]}` to scene components** — use `getRevealFrame()` for visual timing
 - Add or remove scenes to match the number of narration paragraphs (one paragraph = one scene)
 - Import different user components as needed
+- **Click indicators:** When a scene narration says "click X", add `<ClickIndicator x={buttonCenterX} y={buttonCenterY} startFrame={getRevealFrame(sceneTimecodes[0], sceneStart, fps) + 15} label="X" />` as a sibling to `<SafeZone>`, not inside it
 
 **Remotion rules:**
 - Audio: `import { Audio } from '@remotion/media'` — NOT from `remotion`
@@ -821,6 +899,7 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 - Duration: always from `getSceneDuration(timecodes, fps)` — NEVER hardcode `N * fps`
 - Clamp: Always use `extrapolateRight: 'clamp'` on interpolate
 - SafeZone: every scene wraps content in `<SafeZone>` — NEVER use bare `<AbsoluteFill>` with ad-hoc padding/width
+- Music volume: use `volume={(f) => ...}` callback for ducking — 0.4 during intro, fades to 0.15 when steps begin. Use `getSceneDuration(scenes[0], fps)` as the duck point.
 
 ---
 
@@ -840,26 +919,28 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
 9. **Scene durations use `getSceneDuration()` from timecodes** — no hardcoded `N * fps`
 10. **Scene components receive `sceneTimecodes` prop** — reveals use `getRevealFrame()` not fixed frame offsets
 11. **Every scene uses `<SafeZone>`** — no content placed directly in `<AbsoluteFill>` without the SafeZone wrapper
+12. **Music uses volume ducking** — `volume={(f) => ...}` callback, NOT a flat number. Louder (0.4) during intro, ducks to 0.15 when narration steps begin.
 
 **Scene structure:**
-12. Has intro scene and summary scene
-13. **Each scene explains exactly ONE step** — no scene combines two steps. If you see a numbered list (`1. ... 2. ... 3. ...`) in any scene's JSX, the video is BROKEN — split immediately
-14. **No numbered or bulleted lists in scenes** — if a scene renders `<ol>`, `<ul>`, or manual numbering, it MUST be split into separate scenes. This is the #1 most common mistake.
-15. **Every scene has at least 30% empty space** — if it looks crowded, remove content or split
-16. **SafeZone constrains all content** — no element extends beyond the 1200px centered column. No mock UIs pushed to screen edges. No content touching the 1920px frame boundary.
-17. **Every narration paragraph has a matching visual scene** — no explanation without a visual
-18. **Every sentence in the narration has a matching visual change** — the screen NEVER stays static while the narrator keeps talking
-19. **No scene has more than 3 sentences of narration** — if it does, split into two scenes
-20. Narration content matches visual progression 1:1
+13. Has intro scene and summary scene
+14. **Each scene explains exactly ONE step** — no scene combines two steps. If you see a numbered list (`1. ... 2. ... 3. ...`) in any scene's JSX, the video is BROKEN — split immediately
+15. **No numbered or bulleted lists in scenes** — if a scene renders `<ol>`, `<ul>`, or manual numbering, it MUST be split into separate scenes. This is the #1 most common mistake.
+16. **Every scene has at least 30% empty space** — if it looks crowded, remove content or split
+17. **SafeZone constrains all content** — no element extends beyond the 1200px centered column. No mock UIs pushed to screen edges. No content touching the 1920px frame boundary.
+18. **Every narration paragraph has a matching visual scene** — no explanation without a visual
+19. **Every sentence in the narration has a matching visual change** — the screen NEVER stays static while the narrator keeps talking
+20. **No scene has more than 3 sentences of narration** — if it does, split into two scenes
+21. Narration content matches visual progression 1:1
 
 **Tutorial quality:**
-21. **All code/commands use TypingText** — characters appear one by one with blinking cursor
-22. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
-23. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
-24. **Elements appear in stages synced to timecodes** — each reveal at a `getRevealFrame()` value, never all at once
-25. **Command scenes are followed by ResultScene** — show `✓ Success` output after running a command
-26. **Warnings/tips from docs are CalloutScene** — distinct styled cards, not embedded in code scenes
-27. **Pacing driven by timecodes** — scene durations match narration length, not arbitrary guesses
+22. **All code/commands use TypingText** — characters appear one by one with blinking cursor
+23. **Multi-line code uses HighlightedCode** — important line spotlighted, rest dimmed
+24. **Step scenes have StepIndicator** — progress dots showing "Step N of M" (skip on intro/summary)
+25. **Elements appear in stages synced to timecodes** — each reveal at a `getRevealFrame()` value, never all at once
+26. **Command scenes are followed by ResultScene** — show `✓ Success` output after running a command
+27. **Warnings/tips from docs are CalloutScene** — distinct styled cards, not embedded in code scenes
+28. **Pacing driven by timecodes** — scene durations match narration length, not arbitrary guesses
+29. **Click indicators on interactive steps** — when narration says "click/select/tap/press", a `<ClickIndicator>` appears over the target button, synced to the sentence's `getRevealFrame()`
 
 **Call `render_video`** with:
 - `inputProps` — full props (content, branding, audio, metadata, duration)

@@ -235,6 +235,12 @@ async function generateNarrationElevenLabs(
 
   console.error(`Using ElevenLabs TTS with timestamps (voice: ${voiceId})...`);
 
+  // Normalize paragraph breaks — double newlines create ~300ms natural pauses in ElevenLabs TTS
+  const processedScript = script
+    .split(/\n+/)
+    .filter(p => p.trim())
+    .join('\n\n');
+
   // Use /with-timestamps endpoint for real audio-aligned timecodes
   let timecodes: Array<{ start: number; end: number; text: string }>;
   let audioBuffer: Buffer;
@@ -243,12 +249,12 @@ async function generateNarrationElevenLabs(
     const response = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`,
       {
-        text: script,
+        text: processedScript,
         model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.6,
+          stability: 0.75,
           similarity_boost: 0.75,
-          speed: 0.9,
+          speed: 0.85,
         },
       },
       {
@@ -272,13 +278,13 @@ async function generateNarrationElevenLabs(
     audioBuffer = Buffer.from(data.audio_base64, 'base64');
 
     if (data.alignment) {
-      timecodes = deriveTimcodesFromAlignment(data.alignment, script);
+      timecodes = deriveTimcodesFromAlignment(data.alignment, processedScript);
       console.error(`✓ Real timecodes derived from alignment (${timecodes.length} sentences)`);
     } else {
       // Fallback: alignment missing, estimate
       console.error('⚠️  No alignment data in response, falling back to estimated timecodes');
       warnings.push('ElevenLabs returned audio but no alignment data — timecodes are estimated');
-      timecodes = createNarrationTimecodes(script);
+      timecodes = createNarrationTimecodes(processedScript);
     }
 
   } catch (timestampError) {
@@ -290,12 +296,12 @@ async function generateNarrationElevenLabs(
     const response = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
       {
-        text: script,
+        text: processedScript,
         model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.6,
+          stability: 0.75,
           similarity_boost: 0.75,
-          speed: 0.9,
+          speed: 0.85,
         },
       },
       {
@@ -316,7 +322,7 @@ async function generateNarrationElevenLabs(
       return null;
     }
 
-    timecodes = createNarrationTimecodes(script);
+    timecodes = createNarrationTimecodes(processedScript);
   }
 
   const { localPath, staticPath } = await saveAudioBuffer(audioBuffer, 'narration', remotionProjectPath);
