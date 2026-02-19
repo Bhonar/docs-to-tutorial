@@ -1,6 +1,6 @@
 {
   "name": "docs-to-video",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Turn any documentation URL into a polished tutorial video using AI, Remotion, and your own React components",
   "type": "module",
   "bin": {
