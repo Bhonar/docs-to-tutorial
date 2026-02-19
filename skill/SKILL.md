@@ -154,11 +154,11 @@ Returns:
 Write a **short, punchy** narration script. Each paragraph becomes one scene — **one step per paragraph, one paragraph per scene**:
 
 - **Intro** — 1 sentence. "Let's set up [topic] with [technology]."
-- **Step 1** — 1-2 sentences max. "First, install the SDK."
-- **Step 2** — 1-2 sentences max. "Next, configure your API key."
-- **Step 3** — 1-2 sentences max. "Now create the checkout session."
+- **Step 1** — 1-2 sentences. "Step 1. Run the install command to grab the Stripe SDK."
+- **Step 2** — 1-2 sentences. "Step 2. Add your secret key to the environment — Stripe uses it to authenticate."
+- **Step 3** — 1-2 sentences. "Step 3. Create a checkout session — this is where the magic happens."
 - ... (one paragraph per step, as many as the docs require)
-- **Summary** — 1-2 sentences. "That covers the basics. Check the docs to explore webhooks and subscriptions."
+- **Summary** — 1-2 sentences. "That's it! You've got Stripe installed, a checkout ready, and your key secured."
 
 > **⚠️ KEEP IT SHORT.** The narration is a voiceover for a visual tutorial, not a lecture.
 > The visuals do the heavy lifting — the narration just guides attention.
@@ -173,12 +173,14 @@ Write a **short, punchy** narration script. Each paragraph becomes one scene —
 
 | Step complexity | Narration to write | Example |
 |----------------|-------------------|---------|
-| Simple command | 1 sentence (~8 words) | "Install Stripe with npm." |
-| Config/setup | 1-2 sentences (~15 words) | "Add your API key to the env file." |
-| Code with explanation | 2 sentences (~20 words) | "Create the checkout session. The key line is line_items." |
-| Multi-part concept | 2 sentences (~25 words) | "Configure the webhook endpoint. This listens for payment events." |
+| Simple command | 1 sentence (~10 words) | "Step 1. Run the install to grab the Stripe SDK." |
+| Config/setup | 1-2 sentences (~18 words) | "Step 2. Add your secret key to the env file — Stripe needs this to authenticate." |
+| Code with explanation | 2 sentences (~22 words) | "Step 3. Create the checkout session. The key part here is the line_items array — that's what the customer is buying." |
+| Multi-part concept | 2 sentences (~25 words) | "Step 4. Set up the webhook endpoint. This listens for payment events so your app knows when a charge goes through." |
 
 **Guidelines:**
+- **Always say "Step N" at the start of each step's narration.** The viewer should hear "Step 1", "Step 2", etc. for clear audible navigation and pacing. The intro and summary scenes do NOT get step numbers.
+- **Narration should be conversational and add value beyond the visuals.** It's fine to reference what's on screen ("run the install command", "add this to your config"), but don't literally read code or commands verbatim. Describe actions naturally and add *why* it matters. BAD: "Type npm install at sign stripe slash stripe dash js." GOOD: "Step 1. Run the install command to pull in the Stripe library." The voice should feel like a knowledgeable friend guiding you, not a screen reader.
 - Short and direct — say what to do, let the visuals show how
 - Use "we" and "let's" sparingly — prefer imperative: "Install the SDK" over "Let's go ahead and install the SDK"
 - Mention specific function/class names only when the viewer needs to see them
@@ -186,6 +188,10 @@ Write a **short, punchy** narration script. Each paragraph becomes one scene —
 - **No filler phrases:** "Now let's go ahead and", "What we're going to do next is", "As you can see" — cut all of these
 
 **Script structure for natural speech flow:**
+- Write as if you're a knowledgeable friend walking someone through the setup — warm, clear, and helpful
+- Each step paragraph MUST start with "Step N." followed by a natural description of the action
+- It's fine to reference what's on screen ("run the install", "add this config"), but describe it naturally — never read code character by character
+- Add a brief *why* or *what it does* after the action — "Step 2. Add your key to the env file — Stripe needs it to verify your account." This makes the narration valuable beyond just watching the screen
 - Write each paragraph as one or two flowing sentences — NOT bullet points or fragments
 - Avoid choppy fragments like "Now. The key." — write "Now add the API key to your environment."
 - Connect ideas within a paragraph: "Install the SDK, then import it in your app."
@@ -875,13 +881,13 @@ export const Generated: React.FC<TutorialVideoProps> = ({ content, branding, aud
   // --- Timecode-driven timing ---
   const timecodes: Timecode[] = audio.narration?.timecodes ?? [];
   const narrationParagraphs = [
-    "Set up Stripe payments in your app.",
-    "Install the Stripe SDK.",
-    "Package installed successfully.",
-    "Create a checkout session. The key line is line_items.",
-    "Never expose your secret key in client-side code.",
-    "Add your API key to the environment.",
-    "That covers installing Stripe, creating a checkout, and configuring your key.",
+    "Let's set up Stripe payments in your app.",
+    "Step 1. Run the install command to grab the Stripe SDK.",
+    "And just like that, the package is ready to go.",
+    "Step 2. Create a checkout session. The key part is the line_items array — that defines what the customer is buying.",
+    "One important thing — never expose your secret key in client-side code.",
+    "Step 3. Drop your API key into the environment file so Stripe can authenticate your requests.",
+    "That's it! You've installed Stripe, created a checkout, and secured your key.",
   ];
   const scenes = groupTimecodesByScene(timecodes, narrationParagraphs);
 
