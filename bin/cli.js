@@ -20,7 +20,12 @@ const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────
-function prompt(question) {
+const isInteractive = process.stdin.isTTY === true;
+
+function prompt(question, defaultValue = '') {
+  if (!isInteractive) {
+    return Promise.resolve(defaultValue);
+  }
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
@@ -94,7 +99,7 @@ async function setup() {
     console.log(`  ${bold('Run this from your project root')} (where your React/Next.js code lives).`);
     console.log(`  Example: ${cyan('cd ~/my-app && npx docs-to-video setup')}`);
     console.log('');
-    const proceed = await prompt(`  ${cyan('?')} Continue anyway? ${dim('(y/N)')} `);
+    const proceed = await prompt(`  ${cyan('?')} Continue anyway? ${dim('(y/N)')} `, 'n');
     if (proceed.toLowerCase() !== 'y') {
       console.log(dim('\n  Setup cancelled.\n'));
       process.exit(0);
@@ -181,9 +186,6 @@ async function setup() {
   console.log('');
 
   // 6. API keys
-  console.log(bold('  API Keys'));
-  console.log(dim('  Press Enter to skip optional keys\n'));
-
   let tabstackKey = '';
   let elevenLabsKey = '';
   let elevenLabsVoiceId = '';
@@ -199,32 +201,42 @@ async function setup() {
 
     if (existingKeys.TABSTACK_API_KEY || existingKeys.ELEVENLABS_API_KEY) {
       console.log(dim('  Found existing API keys in ~/.docs-to-video/.env'));
-      const reuse = await prompt(`  ${cyan('?')} Keep existing keys? ${dim('(Y/n)')} `);
+      // In non-interactive mode, always keep existing keys
+      const reuse = await prompt(`  ${cyan('?')} Keep existing keys? ${dim('(Y/n)')} `, 'y');
       if (reuse.toLowerCase() !== 'n') {
         tabstackKey = existingKeys.TABSTACK_API_KEY || '';
         elevenLabsKey = existingKeys.ELEVENLABS_API_KEY || '';
         elevenLabsVoiceId = existingKeys.ELEVENLABS_VOICE_ID || '';
-        console.log(green('  Using existing keys.\n'));
+        check('Using existing API keys', true);
       }
     }
   }
 
-  if (!tabstackKey) {
-    tabstackKey = await prompt(`  ${cyan('?')} Tabstack API key ${dim('(https://tabstack.ai/dashboard)')}: `);
+  if (isInteractive) {
+    console.log('');
+    console.log(bold('  API Keys'));
+    console.log(dim('  Press Enter to skip optional keys\n'));
+
     if (!tabstackKey) {
-      console.log(yellow('  Skipped — you can add it later to ~/.docs-to-video/.env'));
+      tabstackKey = await prompt(`  ${cyan('?')} Tabstack API key ${dim('(https://tabstack.ai/dashboard)')}: `);
+      if (!tabstackKey) {
+        console.log(yellow('  Skipped — you can add it later to ~/.docs-to-video/.env'));
+      }
     }
-  }
 
-  if (!elevenLabsKey) {
-    elevenLabsKey = await prompt(`  ${cyan('?')} ElevenLabs API key ${dim('(https://elevenlabs.io)')}: `);
     if (!elevenLabsKey) {
-      console.log(yellow('  Skipped — you can add it later to ~/.docs-to-video/.env'));
+      elevenLabsKey = await prompt(`  ${cyan('?')} ElevenLabs API key ${dim('(https://elevenlabs.io)')}: `);
+      if (!elevenLabsKey) {
+        console.log(yellow('  Skipped — you can add it later to ~/.docs-to-video/.env'));
+      }
     }
-  }
 
-  if (!elevenLabsVoiceId) {
-    elevenLabsVoiceId = await prompt(`  ${cyan('?')} ElevenLabs Voice ID ${dim('(optional, press Enter for default)')}: `);
+    if (!elevenLabsVoiceId) {
+      elevenLabsVoiceId = await prompt(`  ${cyan('?')} ElevenLabs Voice ID ${dim('(optional, press Enter for default)')}: `);
+    }
+  } else if (!tabstackKey && !elevenLabsKey) {
+    console.log(dim('  Non-interactive mode — skipping API key prompts'));
+    console.log(dim('  Add your keys later to ~/.docs-to-video/.env'));
   }
 
   // 7. Write .env
