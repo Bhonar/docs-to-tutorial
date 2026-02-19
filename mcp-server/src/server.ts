@@ -79,7 +79,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'generate_audio',
-      description: 'Generate instrumental background music and narration via ElevenLabs. Uses Freya (expressive young woman) voice by default; override with ELEVENLABS_VOICE_ID env var. Music requires a paid plan; TTS works on free tier. Falls back gracefully if music fails. Files are saved to remotion/public/audio/ for staticFile() access. Returns staticPath for each audio file.',
+      description: 'Generate instrumental background music and narration via ElevenLabs. Uses a calm, confident female narrator voice by default; override with ELEVENLABS_VOICE_ID env var. Music requires a paid plan; TTS works on free tier. Falls back gracefully if music fails. Files are saved to remotion/public/audio/ for staticFile() access. Returns staticPath for each audio file.',
       inputSchema: {
         type: 'object',
         properties: {
