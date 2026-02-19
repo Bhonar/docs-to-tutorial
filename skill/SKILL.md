@@ -15,51 +15,21 @@ Generate tutorial and how-to videos from documentation URLs. The video uses the 
 
 Before starting the workflow, check if the MCP tools are available. Try calling any tool (e.g., `extract_docs_content`). If it works, skip to Step 1.
 
-**If tools are NOT available** (you get "unknown tool" or similar error), the MCP server needs setup. Run these commands from the user's project root:
+**If tools are NOT available** (you get "unknown tool" or similar error), run the setup:
 
-1. **Build the MCP server:**
-   ```bash
-   cd docs-to-video/mcp-server && npm install && npm run build && cd ../..
-   ```
+```bash
+npx docs-to-video setup
+```
 
-2. **Create `.env` if missing:**
-   ```bash
-   if [ ! -f docs-to-video/mcp-server/.env ]; then
-     cp docs-to-video/mcp-server/.env.example docs-to-video/mcp-server/.env
-     echo "Created .env from template — user must add API keys"
-   fi
-   ```
-   If `.env` was just created, tell the user:
-   > You need to add your API keys to `docs-to-video/mcp-server/.env`:
-   > - **TABSTACK_API_KEY** — get it at https://tabstack.ai/dashboard
-   > - **ELEVENLABS_API_KEY** — get it at https://elevenlabs.io
+This copies the MCP server, remotion template, and dependencies into the user's project. It also registers the MCP server and skill automatically.
 
-3. **Register the MCP server:**
-   ```bash
-   node -e "
-   const path = require('path');
-   const fs = require('fs');
-   const serverPath = path.resolve('docs-to-video/mcp-server/dist/server.js');
-   const serverCwd = path.resolve('docs-to-video/mcp-server');
-   if (!fs.existsSync(serverPath)) { console.error('ERROR: Build the MCP server first'); process.exit(1); }
-   const configPath = path.join(require('os').homedir(), '.claude', 'config.json');
-   const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
-   config.mcpServers = config.mcpServers || {};
-   config.mcpServers['docs-to-video'] = { command: 'node', args: [serverPath], cwd: serverCwd };
-   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-   console.log('Registered at', configPath);
-   "
-   ```
+If the user doesn't have API keys yet, tell them:
+> You need to add your API keys to `~/.docs-to-video/.env`:
+> - **TABSTACK_API_KEY** — get it at https://tabstack.ai/dashboard
+> - **ELEVENLABS_API_KEY** — get it at https://elevenlabs.io
 
-4. **Install the skill** (if not already):
-   ```bash
-   mkdir -p ~/.claude/skills/docs-to-video
-   ln -sf "$(pwd)/docs-to-video/skill/SKILL.md" ~/.claude/skills/docs-to-video/SKILL.md
-   ```
-
-5. **Tell the user to restart Claude Code:**
-   > Setup complete! Please restart Claude Code (quit and re-open) for the MCP tools to load, then run `/docs-to-video <url>` again.
+Then **tell the user to restart Claude Code:**
+> Setup complete! Please restart Claude Code (quit and re-open) for the MCP tools to load, then run `/docs-to-video <url>` again.
 
 **STOP here if you had to run setup.** The MCP tools only load at Claude Code startup, so the user must restart before proceeding to Step 1.
 
